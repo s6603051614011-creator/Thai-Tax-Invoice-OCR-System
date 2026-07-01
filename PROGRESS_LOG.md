@@ -145,3 +145,16 @@
   - **C W EQUIPMENT CO., LTD., SIAM U K F CO., LTD.:** ผู้ขายใหม่ อ่านชัดทั้งคู่ ไม่มี flag
 - **รวม train set ใหม่ทั้งหมด: 111 ใบ / 293 ใบ (เหลือ 187 ใบ)**
 - **จุดกลับมาทำต่อ:** เริ่มที่ `inv_141` — ทำงานผ่าน `/loop` dynamic mode ต่อเนื่อง
+
+## 2026-07-01 ค่ำ (ต่อ) — ตั้ง GitHub private repo + แบ่งงานให้ Claude อีกบัญชี (Team B)
+
+- **Push ขึ้น GitHub แล้ว:** `https://github.com/s6603051614011-creator/Thai-Tax-Invoice-OCR-System.git` (private repo)
+  `.gitignore` กัน `dataset/raw/`, `dataset/{augmented,preprocessed,formatted}/`, `models/`, `.venv/`, `input/`, `results/`, `.claude/`
+  ไม่ให้ข้อมูลใบจริง/โมเดลใหญ่/ไฟล์ local หลุดขึ้น repo — commit แค่โค้ด + `dataset/annotations_auto.json` (เฉลย JSON) + `splits.json`/`test_ids.txt`
+- **เจอบั๊กสำคัญในวิธีเช็ค resume เดิม** (ที่จดไว้ใน memory `labeling-workflow`: "เช็ค labeler != claude-code and not verified"):
+  วิธีนี้พลาด entry เก่าจาก Typhoon auto-label (ก่อนเลิกใช้ ดู `no-typhoon-api-labeling`) ที่มีข้อความกรอกไว้แล้วแต่ไม่ใช่ของจริง — เช่น **inv_141** (`auto_labeled: true`, มีข้อมูล Typhoon เดา แต่ไม่มี `labeler` key เลย ผลคือถูกนับเป็น "ทำแล้ว" อย่างผิดๆ)
+  **เงื่อนไขที่ถูกต้อง:** ทำแล้ว = `verified==True` หรือ `labeler=="claude-code"` หรือ (`auto_labeled==False` **และ** `fields.invoice_number` ไม่ว่าง — คือ legacy batch ที่ Claude ทำเองก่อนยุค `commit_label.py` เช่น inv_353/358/390/391)
+  คำนวณใหม่ด้วยเงื่อนไขนี้: **เหลือ label จริง 183 ใบ (inv_141 ถึง inv_352)** ไม่ใช่ 187 ตามที่นับแบบเดิม
+- **แบ่งงานกับ Claude อีกบัญชี (Team B):** เขียนไฟล์ `WORK_SPLIT_TEAMB.md` มอบหมาย 92 ใบ (`inv_246`-`inv_352`) ให้ Team B, **session นี้ (Team A) รับผิดชอบแค่ 91 ใบ `inv_141`-`inv_243`** (ห้ามข้ามไปเกิน inv_243 กันชนกับ Team B)
+  ไฟล์มีสรุปผู้ขายซ้ำ (tax id/ที่อยู่) ให้ Team B ใช้ตรงกัน + วิธี sync กลับผ่าน git (`git pull --rebase` ก่อน push เพราะ merge ไฟล์ JSON เดียวกัน)
+- **จุดกลับมาทำต่อของ session นี้:** เริ่มที่ `inv_141` แต่ **ห้ามเกิน `inv_243`** (เขตของ Team B เริ่มที่ inv_246)
