@@ -1,0 +1,25 @@
+[
+  {
+    "id": "inv_195",
+    "fields": {
+      "invoice_number": "NGH5901B0001",
+      "invoice_date": "13-ม.ค.-59",
+      "seller_name_th": "ห้างหุ้นส่วนจำกัด นิวกู๊ดเฮง (999)",
+      "seller_name_en": "",
+      "seller_tax_id": "0733550001529",
+      "seller_address": "316/2 ซ.อัสสัมชัญ23 ถนนเพชรเกษม แขวงบางไผ่ เขตบางแค กรุงเทพฯ 10160",
+      "buyer_name_th": "",
+      "buyer_name_en": "",
+      "buyer_tax_id": "",
+      "buyer_address": "39 หมู่ 2 อ.สามร้อยยอด จ.ประจวบคีรีขันธ์ 74000",
+      "items": [
+        {"description": "ยางตัน \"PIOTYRES\" ขนาด 600-9", "quantity": "2 เส้น", "unit_price": "5,100.00", "discount": "", "amount": "10,200.00"}
+      ],
+      "subtotal": "10,200.00",
+      "discount": "2,140.00",
+      "vat": "564.20",
+      "grand_total": "8,624.20"
+    },
+    "flags": ["buyer_name_th", "buyer_tax_id"]
+  }
+]
