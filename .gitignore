@@ -1,0 +1,23 @@
+# Python env
+.venv/
+__pycache__/
+*.pyc
+
+# Large model checkpoints
+models/
+dataset/models/
+
+# Raw / derived invoice scans (real business documents — keep local only)
+dataset/raw/
+dataset/augmented/
+dataset/preprocessed/
+dataset/formatted/
+input/
+results/
+
+# Editor / OS
+.vscode/
+Thumbs.db
+
+# Local Claude Code settings (machine-specific)
+.claude/

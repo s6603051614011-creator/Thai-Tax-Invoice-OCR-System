@@ -1,0 +1,5 @@
+# Extra deps for the FastAPI inference endpoint (api.py)
+# install: pip install -r requirements-api.txt
+fastapi
+uvicorn[standard]
+python-multipart
