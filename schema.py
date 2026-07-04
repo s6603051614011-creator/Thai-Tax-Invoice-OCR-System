@@ -98,18 +98,30 @@ def clean_str(v) -> str:
 
 def fmt_money(v) -> str:
     """
-    normalize จำนวนเงินเป็นรูปแบบ canonical: '46,728.97'
+    normalize จำนวนเงิน: ใส่ comma คั่นหลักพันให้ แต่ "ไม่ปัดทศนิยม"
+    เก็บจำนวนตำแหน่งทศนิยมตามที่พิมพ์จริงในรูปเป๊ะ (เช่น '345.7944' -> '345.7944',
+    '271000.00' -> '271,000.00', '150.000' -> '150.000') เพราะบางใบพิมพ์ทศนิยม
+    ไม่เท่ากับ 2 ตำแหน่งจริง ๆ (unit price คำนวณจากส่วนลดเป็นต้น)
     - ว่าง -> '' (สำคัญ: สอนโมเดลให้ตอบว่างเมื่อไม่มี field ไม่ใช่เดา)
-    - parse ไม่ได้ -> คืนค่าเดิม (ให้คนแก้ตอน review)
+    - parse ไม่ได้ (เช่น '20%') -> คืนค่าเดิม (ให้คนแก้ตอน review)
     """
     s = clean_str(v)
     if s == "":
         return ""
     cleaned = s.replace(",", "").replace("บาท", "").replace(" ", "")
     try:
-        return f"{float(cleaned):,.2f}"
+        float(cleaned)
     except ValueError:
         return s
+    neg = cleaned.startswith("-")
+    if neg:
+        cleaned = cleaned[1:]
+    int_part, _, dec_part = cleaned.partition(".")
+    int_part = str(int(int_part or "0"))
+    result = f"{int(int_part):,}"
+    if dec_part:
+        result += "." + dec_part
+    return ("-" if neg else "") + result
 
 
 def empty_record() -> dict:
