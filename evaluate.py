@@ -34,7 +34,7 @@ from datetime import datetime
 
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-from PIL import Image
+from PIL import Image, ImageOps
 from tqdm import tqdm
 from jiwer import cer, wer   # pip install jiwer
 
@@ -60,7 +60,7 @@ class Config:
     MAX_NEW_TOKENS:   int = 768          # JSON ใบหลายรายการ 512 อาจไม่พอ
     # image resolution ต้องตรงกับตอน train (Finetune.py) ไม่งั้น LoRA เพี้ยน
     MIN_PIXELS:       int = 64 * 28 * 28
-    MAX_PIXELS:       int = 128 * 28 * 28
+    MAX_PIXELS:       int = 256 * 28 * 28
 
     # Fields ที่วัด Field Accuracy — ดึงจาก schema.py (scalar + summary)
     # items วัดแยกต่างหาก (calc_items_metrics)
@@ -233,7 +233,7 @@ def load_model(model_type: str):
 def run_inference(model, processor, image_b64: str, system_prompt: str, user_prompt: str) -> str:
     """รัน inference กับรูปใบกำกับ 1 ใบ"""
     b64_data = image_b64.split(",")[-1]
-    image = Image.open(BytesIO(base64.b64decode(b64_data))).convert("RGB")
+    image = ImageOps.exif_transpose(Image.open(BytesIO(base64.b64decode(b64_data)))).convert("RGB")
 
     messages = [
         {"role": "system", "content": system_prompt},

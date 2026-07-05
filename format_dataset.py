@@ -41,9 +41,9 @@ VAL_RATIO        = 0.10
 SEED             = 42
 
 # ต้องตรงกับ Finetune.py Config เป๊ะ (ดูคอมเมนต์ที่ MAX_SEQ_LEN ในนั้น)
-MAX_SEQ_LEN = 960
+MAX_SEQ_LEN = 1024
 MIN_PIXELS  = 64 * 28 * 28
-MAX_PIXELS  = 128 * 28 * 28
+MAX_PIXELS  = 256 * 28 * 28
 
 
 def base_id(entry_id: str) -> str:
@@ -115,12 +115,12 @@ def main():
 
     # กรอง sample ที่ยาวเกิน MAX_SEQ_LEN ทิ้ง (วัด token จริงด้วย processor เดียวกับ
     # ตอนเทรน) แทนการปล่อยให้ InvoiceDataset ตัด assistant target ทิ้งกลางคัน
-    from PIL import Image
+    from PIL import Image, ImageOps
     print(f"🔍 วัด token length จริงของ {len(trainable)} samples (MAX_SEQ_LEN={MAX_SEQ_LEN})...")
     processor = load_processor()
     kept, dropped = [], []
     for i, e in enumerate(trainable):
-        pil_image = Image.open(e["image_path"]).convert("RGB")
+        pil_image = ImageOps.exif_transpose(Image.open(e["image_path"])).convert("RGB")
         length = token_len(processor, e, pil_image)
         (kept if length <= MAX_SEQ_LEN else dropped).append(e)
         if (i + 1) % 200 == 0:

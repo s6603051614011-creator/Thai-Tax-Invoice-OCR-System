@@ -31,7 +31,7 @@ from io import BytesIO
 
 print("✓ stdlib imported", flush=True)
 
-from PIL import Image
+from PIL import Image, ImageOps
 from tqdm import tqdm
 
 print("✓ PIL imported", flush=True)
@@ -87,10 +87,11 @@ class Config:
     LEARNING_RATE:       float = 5e-5 # conservative -> loss นิ่ง เหมาะ data เล็ก
     NUM_EPOCHS:          int   = 10
     WARMUP_RATIO:        float = 0.05 # ใช้ ratio แทน fixed steps -> ปรับตาม dataset อัตโนมัติ
-    MAX_SEQ_LEN:         int   = 960  # หลังย่อ USER_PROMPT (763->209 tokens) + ลด MAX_PIXELS แล้ว
-                                       # วัด VRAM จริงที่ seq_len~1000 -> peak 5.96GB/reserved 6.36GB
-                                       # (การ์ด 6.4GB) 960 เผื่อกันชน; format_dataset.py กรอง sample
-                                       # ที่ยาวเกินทิ้ง (~9%) แทนการตัด target กลางคัน
+    MAX_SEQ_LEN:         int   = 1024 # Group 2: กลับไป MAX_PIXELS=256 (256px inference-only ให้ field
+                                       # acc เพิ่มมหาศาลใน Group 1 experiment) วัด VRAM จริงด้วย sample
+                                       # ยาวสุดจริง (256px) -> seq_len 1024 -> peak_reserved 6.17GB
+                                       # (1152 -> 6.57GB, 1280 -> 6.98GB เกินขอบเขตที่เคยเทรนผ่านจริง
+                                       # ที่ 6.36GB) format_dataset.py กรอง sample ยาวเกินทิ้ง (~12%)
     SAVE_STEPS:          int   = 50
     EVAL_STEPS:          int   = 50
     LOGGING_STEPS:       int   = 5
@@ -98,7 +99,7 @@ class Config:
 
     # ── Image ──
     MIN_PIXELS: int = 64 * 28 * 28
-    MAX_PIXELS: int = 128 * 28 * 28  # ลดจาก 256 กัน VRAM overflow (ดูเหตุผลที่ MAX_SEQ_LEN)
+    MAX_PIXELS: int = 256 * 28 * 28  # Group 2: กลับขึ้น 256 (ดูเหตุผลที่ MAX_SEQ_LEN)
 
 
 cfg = Config()
@@ -108,11 +109,10 @@ print("✓ Config created", flush=True)
 # ══════════════════════════════════════════════
 # HuggingFace Token
 # ══════════════════════════════════════════════
-HF_TOKEN = os.environ.get("HF_TOKEN", "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")
+HF_TOKEN = os.environ.get("HF_TOKEN", "")
 
 if HF_TOKEN:
-    source = "env" if os.environ.get("HF_TOKEN") else "code"
-    print(f"✓ HF Token: ...{HF_TOKEN[-4:]} (จาก {source})", flush=True)
+    print(f"✓ HF Token: ...{HF_TOKEN[-4:]} (จาก env)", flush=True)
 else:
     try:
         from huggingface_hub import get_token
@@ -258,7 +258,7 @@ class InvoiceDataset(Dataset):
         for item in user_content:
             if item["type"] == "image":
                 b64 = item["image"].split(",")[-1]
-                pil_image = Image.open(BytesIO(base64.b64decode(b64))).convert("RGB")
+                pil_image = ImageOps.exif_transpose(Image.open(BytesIO(base64.b64decode(b64)))).convert("RGB")
             elif item["type"] == "text":
                 text_prompt = item["text"]
 
