@@ -87,15 +87,18 @@ class Config:
     LEARNING_RATE:       float = 5e-5 # conservative -> loss นิ่ง เหมาะ data เล็ก
     NUM_EPOCHS:          int   = 10
     WARMUP_RATIO:        float = 0.05 # ใช้ ratio แทน fixed steps -> ปรับตาม dataset อัตโนมัติ
-    MAX_SEQ_LEN:         int   = 1024 # 512 -> 1024: prompt+JSON ยาว 512 ตัด target ทิ้ง = เทรนพัง
+    MAX_SEQ_LEN:         int   = 960  # หลังย่อ USER_PROMPT (763->209 tokens) + ลด MAX_PIXELS แล้ว
+                                       # วัด VRAM จริงที่ seq_len~1000 -> peak 5.96GB/reserved 6.36GB
+                                       # (การ์ด 6.4GB) 960 เผื่อกันชน; format_dataset.py กรอง sample
+                                       # ที่ยาวเกินทิ้ง (~9%) แทนการตัด target กลางคัน
     SAVE_STEPS:          int   = 50
     EVAL_STEPS:          int   = 50
     LOGGING_STEPS:       int   = 5
     EARLY_STOP_PATIENCE: int   = 5
 
     # ── Image ──
-    MIN_PIXELS: int = 128 * 28 * 28
-    MAX_PIXELS: int = 256 * 28 * 28
+    MIN_PIXELS: int = 64 * 28 * 28
+    MAX_PIXELS: int = 128 * 28 * 28  # ลดจาก 256 กัน VRAM overflow (ดูเหตุผลที่ MAX_SEQ_LEN)
 
 
 cfg = Config()
@@ -429,7 +432,13 @@ def train(model, processor):
     print_vram("ก่อน train")
     print("", flush=True)
 
-    trainer.train()
+    # auto-resume: ถ้ามี checkpoint ค้างจาก run ก่อน (เช่นโดน process/session
+    # ตัดตอนกลางคัน) ให้ต่อจากจุดนั้นแทนเริ่มใหม่ทั้งหมด
+    from transformers.trainer_utils import get_last_checkpoint
+    last_checkpoint = get_last_checkpoint(cfg.CHECKPOINT_DIR)
+    if last_checkpoint:
+        print(f"♻️  พบ checkpoint ค้าง -> resume จาก {last_checkpoint}", flush=True)
+    trainer.train(resume_from_checkpoint=last_checkpoint)
 
     print(f"\n💾 บันทึก Best Model → {cfg.BEST_MODEL_DIR}", flush=True)
     trainer.save_model(cfg.BEST_MODEL_DIR)

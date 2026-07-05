@@ -38,7 +38,7 @@ from PIL import Image
 from tqdm import tqdm
 from jiwer import cer, wer   # pip install jiwer
 
-from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLProcessor
+from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLProcessor, BitsAndBytesConfig
 from peft import PeftModel
 
 import schema   # single source of truth ของ field/type/canonical JSON
@@ -59,8 +59,8 @@ class Config:
     # Generation
     MAX_NEW_TOKENS:   int = 768          # JSON ใบหลายรายการ 512 อาจไม่พอ
     # image resolution ต้องตรงกับตอน train (Finetune.py) ไม่งั้น LoRA เพี้ยน
-    MIN_PIXELS:       int = 128 * 28 * 28
-    MAX_PIXELS:       int = 256 * 28 * 28
+    MIN_PIXELS:       int = 64 * 28 * 28
+    MAX_PIXELS:       int = 128 * 28 * 28
 
     # Fields ที่วัด Field Accuracy — ดึงจาก schema.py (scalar + summary)
     # items วัดแยกต่างหาก (calc_items_metrics)
@@ -197,17 +197,29 @@ def load_model(model_type: str):
         trust_remote_code=True,
     )
 
+    # 4-bit quant เหมือนตอน train (Finetune.py) -- ไม่งั้น bf16 เต็ม (~6GB แค่
+    # น้ำหนัก) ไม่พอ VRAM 6GB ของการ์ดนี้ HF จะ offload บาง layer ไป CPU RAM
+    # อัตโนมัติ ทำให้ generate() ช้าลงมหาศาล (ส่ง tensor ข้าม GPU/CPU ทุก token)
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16,
+    )
+
     if model_type == "baseline":
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             cfg.BASE_MODEL_ID,
-            device_map="auto",
+            device_map={"": 0},
+            quantization_config=bnb_config,
             torch_dtype=torch.bfloat16,
             trust_remote_code=True,
         )
     else:
         base = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             cfg.BASE_MODEL_ID,
-            device_map="auto",
+            device_map={"": 0},
+            quantization_config=bnb_config,
             torch_dtype=torch.bfloat16,
             trust_remote_code=True,
         )
@@ -484,6 +496,21 @@ def export_excel(baseline_sum: dict, ft_sum: dict, baseline_res: list, ft_res: l
             if c_idx in [2, 3, 4, 5, 6, 7]:
                 c.number_format = num_fmt
             c.alignment = Alignment(horizontal="center")
+
+    # ── Sheet 3: ข้อความดิบ (GT vs Baseline vs Fine-tuned) ──
+    ws3 = wb.create_sheet("ข้อความดิบ")
+    raw_headers = ["ID", "Ground Truth", "Baseline Pred", "Fine-tuned Pred"]
+    for i, h in enumerate(raw_headers, 1):
+        hdr(ws3, 1, i, h, blue_fill)
+
+    for r_idx, (br, fr) in enumerate(zip(baseline_res, ft_res), 2):
+        row_data = [br["id"], br["gt"], br["pred"], fr["pred"]]
+        for c_idx, v in enumerate(row_data, 1):
+            c = ws3.cell(row=r_idx, column=c_idx, value=v)
+            c.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+    for col, width in zip("ABCD", [12, 60, 60, 60]):
+        ws3.column_dimensions[col].width = width
 
     wb.save(path)
     print(f"\n📊 Export Excel → {path}")

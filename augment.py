@@ -33,67 +33,43 @@ import albumentations as A
 RAW_DIR        = Path("dataset/raw")
 PREP_DIR       = Path("dataset/preprocessed")
 AUG_DIR        = Path("dataset/augmented")
-ANNOTATIONS    = Path("dataset/annotations.json")
+ANNOTATIONS    = Path("dataset/annotations_auto.json")
 AUG_LABELS_OUT = Path("dataset/augmented_labels.json")
 
-AUGMENT_PER_IMAGE = 6
+# เบาๆ ตั้งใจ: มีรูปจริง 402 ใบอยู่แล้ว (ไม่ใช่ ~50 ใบตามแผนเดิม) แค่ต้องการ
+# ให้โมเดลทนต่อสภาพถ่ายจริง (เอียงนิดหน่อย, แสงไม่สม่ำเสมอ, กล้องมือถือสั่น)
+# ไม่ต้องการขยายข้อมูลจนล้น (เสี่ยง overfit กับ noise สังเคราะห์แทนเนื้อหาจริง)
+AUGMENT_PER_IMAGE = 2
 SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
 
 
 # ──────────────────────────────────────────
-# Augmentation Pipelines
+# Augmentation Pipelines (เบาๆ — ไม่มี perspective warp / crop ที่เสี่ยงตัดเนื้อหา
+# หรือบิดตัวอักษรจนอ่านไม่ออก เน้นจำลองสภาพถ่ายจริงเท่านั้น)
 # ──────────────────────────────────────────
 
-pipeline_phone = A.Compose([
+pipeline_photo_light = A.Compose([
+    A.Rotate(limit=4, border_mode=cv2.BORDER_REPLICATE, p=0.6),
     A.OneOf([
-        A.GaussianBlur(blur_limit=(3, 5), p=0.5),
-        A.MotionBlur(blur_limit=5, p=0.5),
-    ], p=0.4),
-    A.GaussNoise(var_limit=(10.0, 40.0), p=0.4),
-    A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.6),
-    A.HueSaturationValue(hue_shift_limit=5, sat_shift_limit=20, val_shift_limit=20, p=0.3),
+        A.GaussianBlur(blur_limit=(3, 3), p=0.5),
+        A.MotionBlur(blur_limit=3, p=0.5),
+    ], p=0.25),
+    A.GaussNoise(std_range=(0.02, 0.05), p=0.3),
+    A.RandomBrightnessContrast(brightness_limit=0.15, contrast_limit=0.15, p=0.6),
 ])
 
-pipeline_paper = A.Compose([
-    A.ToGray(p=0.3),
-    A.RandomBrightnessContrast(brightness_limit=(-0.1, 0.3), contrast_limit=(-0.1, 0.3), p=0.7),
-    A.GaussNoise(var_limit=(5.0, 20.0), p=0.5),
-    A.ImageCompression(quality_range=(70, 95), p=0.4),
+pipeline_scan_light = A.Compose([
+    A.Rotate(limit=2, border_mode=cv2.BORDER_REPLICATE, p=0.4),
+    A.RandomBrightnessContrast(brightness_limit=(-0.15, 0.2), contrast_limit=(-0.1, 0.2), p=0.6),
+    A.ImageCompression(quality_range=(80, 95), p=0.3),
+    A.ToGray(p=0.15),
 ])
-
-pipeline_perspective = A.Compose([
-    A.Rotate(limit=5, border_mode=cv2.BORDER_REPLICATE, p=0.7),
-    A.Perspective(scale=(0.02, 0.05), p=0.5),
-    A.RandomBrightnessContrast(brightness_limit=0.15, contrast_limit=0.15, p=0.5),
-])
-
-pipeline_dark = A.Compose([
-    A.RandomBrightnessContrast(brightness_limit=(-0.3, -0.1), contrast_limit=(-0.1, 0.2), p=1.0),
-    A.GaussNoise(var_limit=(15.0, 50.0), p=0.6),
-    A.GaussianBlur(blur_limit=(3, 5), p=0.3),
-])
-
-pipeline_bright = A.Compose([
-    A.RandomBrightnessContrast(brightness_limit=(0.1, 0.3), contrast_limit=(-0.2, 0.1), p=1.0),
-    A.HueSaturationValue(sat_shift_limit=(-30, -10), p=0.5),
-])
-
-def get_pipeline_crop(h, w):
-    return A.Compose([
-        A.RandomCrop(height=int(h * 0.9), width=int(w * 0.9), p=1.0),
-        A.Rotate(limit=3, border_mode=cv2.BORDER_REPLICATE, p=0.5),
-        A.RandomBrightnessContrast(brightness_limit=0.1, p=0.4),
-    ])
 
 PIPELINES = [
-    ("phone",       pipeline_phone),
-    ("paper",       pipeline_paper),
-    ("perspective", pipeline_perspective),
-    ("dark",        pipeline_dark),
-    ("bright",      pipeline_bright),
-    ("crop",        None),
+    ("photo_light", pipeline_photo_light),
+    ("scan_light",  pipeline_scan_light),
 ]
 
 
@@ -144,10 +120,6 @@ def cv_to_pil(img: np.ndarray) -> Image.Image:
 
 def augment_image(pil_img: Image.Image, pipeline_name: str, pipeline) -> Image.Image:
     cv_img = pil_to_cv(pil_img)
-    h, w = cv_img.shape[:2]
-
-    if pipeline_name == "crop":
-        pipeline = get_pipeline_crop(h, w)
 
     try:
         rgb = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
@@ -166,7 +138,6 @@ def run_augmentation():
     # ตรวจสอบไฟล์
     if not ANNOTATIONS.exists():
         print(f"❌ ไม่พบ {ANNOTATIONS}")
-        print("   กรุณา Export annotations.json จาก Annotation Tool ก่อน")
         return
 
     if not RAW_DIR.exists():
@@ -233,7 +204,7 @@ def run_augmentation():
             skip_no_file += 1
             continue
 
-        # ── รัน Augmentation 6 แบบ ──
+        # ── รัน Augmentation (เบาๆ, AUGMENT_PER_IMAGE แบบ) ──
         stem = img_path.stem
         for i in range(AUGMENT_PER_IMAGE):
             p_name, p_logic = PIPELINES[i % len(PIPELINES)]
