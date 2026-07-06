@@ -15,6 +15,9 @@ dataset/formatted/
 input/
 results/
 
+# Tesseract language data (downloaded, not repo content)
+.tessdata/
+
 # Editor / OS
 .vscode/
 Thumbs.db
