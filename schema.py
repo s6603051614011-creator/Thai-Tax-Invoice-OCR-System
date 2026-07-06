@@ -147,6 +147,8 @@ def normalize_fields(fields: dict) -> dict:
 
     items = []
     for it in (src.get("items") or []):
+        if not isinstance(it, dict):
+            continue  # โมเดลบางตัว (เช่น Typhoon ที่ไม่ได้เทรนตรง schema นี้) อาจตอบ item เป็น list ไม่ใช่ dict
         item = {}
         for col in ITEM_FIELDS:
             val = it.get(col, "")

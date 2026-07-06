@@ -14,6 +14,7 @@ dataset/preprocessed/
 dataset/formatted/
 input/
 results/
+typhoon_compare_examples.html   # embeds real invoice images as base64
 
 # Tesseract language data (downloaded, not repo content)
 .tessdata/
