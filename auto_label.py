@@ -12,6 +12,7 @@ Auto-Label Script — สร้าง annotations อัตโนมัติด
   python auto_label.py --merge dataset/annotations.json  ← merge กับไฟล์เดิม
 """
 
+import os
 import json
 import base64
 import time
@@ -28,7 +29,7 @@ import schema  # single source of truth ของโครงสร้างเ�
 # ══════════════════════════════════════════════
 # CONFIG
 # ══════════════════════════════════════════════
-API_KEY    = "sk-MlRcAVf9kC4zq2ceR8EEUZG0iSXZDS54jTEAitaBLtEuf6jZ"   # ← ใส่ Typhoon OCR API Key ที่นี่
+API_KEY    = os.environ.get("TYPHOON_API_KEY", "")   # ตั้ง env var TYPHOON_API_KEY
 API_URL    = "https://api.opentyphoon.ai/v1/chat/completions"
 MODEL      = "typhoon-ocr"
 

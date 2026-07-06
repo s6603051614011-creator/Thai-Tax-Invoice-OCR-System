@@ -45,7 +45,7 @@ import schema  # single source of truth: BASE_MODEL_ID + prompt + parser
 ADAPTER_DIR     = os.environ.get("ADAPTER_DIR", "models/best_model")
 HF_TOKEN        = os.environ.get("HF_TOKEN") or None
 MAX_NEW_TOKENS  = 768
-MIN_PIXELS      = 128 * 28 * 28   # ต้องตรงกับตอน train (Finetune.py)
+MIN_PIXELS      = 64 * 28 * 28    # ต้องตรงกับตอน train (Finetune.py) เป๊ะ
 MAX_PIXELS      = 256 * 28 * 28
 MAX_UPLOAD_MB   = 15
 APPLY_PREPROCESS = os.environ.get("APPLY_PREPROCESS", "0") == "1"
