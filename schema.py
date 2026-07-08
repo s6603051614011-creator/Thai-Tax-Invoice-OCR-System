@@ -187,8 +187,25 @@ def build_canonical_json(fields: dict, indent=None) -> str:
 #   train/inference prompt ที่ไม่ตรงกัน = สาเหตุหลักที่ทำให้ผลเพี้ยน
 # ══════════════════════════════════════════════
 # adapter ใน models/best_model ถูกเทรนบน base นี้ (ดู adapter_config.json)
-# 6GB VRAM รับ 7B ไม่ไหว -> ใช้ 3B (typhoon-ocr-7b = Qwen2.5-VL-7B base)
-BASE_MODEL_ID = "Qwen/Qwen2.5-VL-3B-Instruct"
+# 6GB VRAM รับ 7B ไม่ไหว -> ใช้ base 2-3B
+#   - "Qwen/Qwen2.5-VL-3B-Instruct"  : Qwen2.5-VL 3B (ฐานเดียวกับ typhoon-ocr-7b)
+#   - "typhoon-ai/typhoon-ocr1.5-2b" : Typhoon OCR 1.5 2B (Qwen3-VL) เทรนมาอ่านเอกสารไทยแล้ว
+# เปลี่ยนบรรทัดเดียวพอ -- model/processor class เลือกอัตโนมัติจาก config (ดู get_model_class)
+BASE_MODEL_ID = "typhoon-ai/typhoon-ocr1.5-2b"
+
+
+def get_model_class():
+    """คืน class โหลดโมเดลตามสถาปัตยกรรมของ BASE_MODEL_ID อัตโนมัติ
+    (Qwen2.5-VL -> Qwen2_5_VLForConditionalGeneration, Qwen3-VL -> Qwen3VLForConditionalGeneration)
+    -- lazy import กัน schema.py ที่ไฟล์อื่น import ให้ยังเบา ไม่ลาก transformers มาด้วยเสมอ"""
+    from transformers import AutoModelForImageTextToText
+    return AutoModelForImageTextToText
+
+
+def get_processor_class():
+    """คืน class โหลด processor ตามสถาปัตยกรรมของ BASE_MODEL_ID อัตโนมัติ"""
+    from transformers import AutoProcessor
+    return AutoProcessor
 
 # prompt เดียวกับที่ auto_label.py ใช้สร้าง JSON target ตอนทำ dataset
 SYSTEM_PROMPT = """คุณคือผู้เชี่ยวชาญด้านการอ่านใบกำกับภาษีไทย

@@ -36,17 +36,21 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLProcessor, BitsAndBytesConfig
+from transformers import BitsAndBytesConfig
 from peft import PeftModel
 
 import schema  # single source of truth: BASE_MODEL_ID + prompt + parser
+
+# model/processor class เลือกอัตโนมัติตาม BASE_MODEL_ID (Qwen2.5-VL หรือ Qwen3-VL)
+ModelClass     = schema.get_model_class()
+ProcessorClass = schema.get_processor_class()
 
 # ── Config ───────────────────────────────────────────────
 ADAPTER_DIR     = os.environ.get("ADAPTER_DIR", "models/best_model")
 HF_TOKEN        = os.environ.get("HF_TOKEN") or None
 MAX_NEW_TOKENS  = 768
-MIN_PIXELS      = 64 * 28 * 28    # ต้องตรงกับตอน train (Finetune.py) เป๊ะ
-MAX_PIXELS      = 256 * 28 * 28
+MIN_PIXELS      = 64 * 32 * 32    # ต้องตรงกับตอน train (Finetune.py) เป๊ะ -- Qwen3-VL 32px/token
+MAX_PIXELS      = 320 * 32 * 32
 MAX_UPLOAD_MB   = 15
 APPLY_PREPROCESS = os.environ.get("APPLY_PREPROCESS", "0") == "1"
 # ─────────────────────────────────────────────────────────
@@ -60,14 +64,14 @@ def load_model():
     if not torch.cuda.is_available():
         raise RuntimeError("ไม่พบ GPU/CUDA — inference โมเดลนี้ต้องใช้ CUDA")
 
-    print(f"📦 โหลด base: {schema.BASE_MODEL_ID} (4-bit)...", flush=True)
+    print(f"โหลด base: {schema.BASE_MODEL_ID} (4-bit)...", flush=True)
     bnb = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_use_double_quant=True,
         bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=torch.bfloat16,
     )
-    base = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    base = ModelClass.from_pretrained(
         schema.BASE_MODEL_ID,
         device_map={"": 0},
         quantization_config=bnb,
@@ -78,24 +82,24 @@ def load_model():
     )
 
     if os.path.isdir(ADAPTER_DIR):
-        print(f"🔧 โหลด LoRA adapter: {ADAPTER_DIR}", flush=True)
+        print(f"โหลด LoRA adapter: {ADAPTER_DIR}", flush=True)
         os.makedirs("offload_tmp", exist_ok=True)
         model = PeftModel.from_pretrained(
             base, ADAPTER_DIR, offload_folder="offload_tmp", offload_buffers=True,
         )
         proc_src = ADAPTER_DIR
     else:
-        print(f"⚠️  ไม่พบ adapter ที่ {ADAPTER_DIR} -> ใช้ base model เปล่า (baseline)", flush=True)
+        print(f"ไม่พบ adapter ที่ {ADAPTER_DIR} -> ใช้ base model เปล่า (baseline)", flush=True)
         model = base
         proc_src = schema.BASE_MODEL_ID
 
     model.eval()
-    processor = Qwen2_5_VLProcessor.from_pretrained(
+    processor = ProcessorClass.from_pretrained(
         proc_src, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS,
         trust_remote_code=True, token=HF_TOKEN,
     )
     STATE.update(model=model, processor=processor, device="cuda", loaded=True)
-    print("✅ โมเดลพร้อมใช้งาน", flush=True)
+    print("โมเดลพร้อมใช้งาน", flush=True)
 
 
 @asynccontextmanager
@@ -104,7 +108,7 @@ async def lifespan(app: FastAPI):
         load_model()
     except Exception as e:
         STATE["error"] = str(e)
-        print(f"❌ โหลดโมเดลไม่สำเร็จ: {e}", flush=True)
+        print(f"โหลดโมเดลไม่สำเร็จ: {e}", flush=True)
     yield
     # cleanup
     STATE["model"] = None
@@ -134,7 +138,7 @@ def _maybe_preprocess(img: Image.Image) -> Image.Image:
             if callable(fn):
                 return fn(img)
     except Exception as e:
-        print(f"⚠️  preprocess ข้าม ({e})", flush=True)
+        print(f"preprocess ข้าม ({e})", flush=True)
     return img
 
 
@@ -211,5 +215,5 @@ async def ocr(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    print("\n🚀 เปิด API ที่ http://localhost:8000  (Swagger: /docs)\n", flush=True)
+    print("\nเปิด API ที่ http://localhost:8000  (Swagger: /docs)\n", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=8000)

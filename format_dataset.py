@@ -41,9 +41,9 @@ VAL_RATIO        = 0.10
 SEED             = 42
 
 # ต้องตรงกับ Finetune.py Config เป๊ะ (ดูคอมเมนต์ที่ MAX_SEQ_LEN ในนั้น)
-MAX_SEQ_LEN = 1024
-MIN_PIXELS  = 64 * 28 * 28
-MAX_PIXELS  = 256 * 28 * 28
+MAX_SEQ_LEN = 1280
+MIN_PIXELS  = 64 * 32 * 32
+MAX_PIXELS  = 320 * 32 * 32
 
 
 def base_id(entry_id: str) -> str:
@@ -75,8 +75,7 @@ def build_sample(entry: dict, data_uri: str) -> dict:
 
 def load_processor():
     """โหลด processor เดียวกับ Finetune.py เพื่อวัด token length จริง (ไม่ใช่ประมาณ)"""
-    from transformers import Qwen2_5_VLProcessor
-    return Qwen2_5_VLProcessor.from_pretrained(
+    return schema.get_processor_class().from_pretrained(
         schema.BASE_MODEL_ID, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS,
         trust_remote_code=True,
     )
@@ -99,10 +98,10 @@ def token_len(processor, entry: dict, pil_image) -> int:
 
 def main():
     if not AUGMENTED_LABELS.exists():
-        print(f"❌ ไม่พบ {AUGMENTED_LABELS} — รัน augment.py ก่อน")
+        print(f"ไม่พบ {AUGMENTED_LABELS} — รัน augment.py ก่อน")
         return
     if not SPLITS.exists():
-        print(f"❌ ไม่พบ {SPLITS} — รัน make_splits.py ก่อน")
+        print(f"ไม่พบ {SPLITS} — รัน make_splits.py ก่อน")
         return
 
     entries = json.loads(AUGMENTED_LABELS.read_text(encoding="utf-8"))
@@ -116,7 +115,7 @@ def main():
     # กรอง sample ที่ยาวเกิน MAX_SEQ_LEN ทิ้ง (วัด token จริงด้วย processor เดียวกับ
     # ตอนเทรน) แทนการปล่อยให้ InvoiceDataset ตัด assistant target ทิ้งกลางคัน
     from PIL import Image, ImageOps
-    print(f"🔍 วัด token length จริงของ {len(trainable)} samples (MAX_SEQ_LEN={MAX_SEQ_LEN})...")
+    print(f"วัด token length จริงของ {len(trainable)} samples (MAX_SEQ_LEN={MAX_SEQ_LEN})...")
     processor = load_processor()
     kept, dropped = [], []
     for i, e in enumerate(trainable):
@@ -126,7 +125,7 @@ def main():
         if (i + 1) % 200 == 0:
             print(f"   {i+1}/{len(trainable)}", flush=True)
     trainable = kept
-    print(f"✓ กรองทิ้ง {len(dropped)} samples ที่ยาวเกิน {MAX_SEQ_LEN} tokens "
+    print(f"กรองทิ้ง {len(dropped)} samples ที่ยาวเกิน {MAX_SEQ_LEN} tokens "
           f"({100*len(dropped)/(len(kept)+len(dropped)):.1f}%)")
 
     # แบ่ง train/val ที่ระดับ "ใบต้นฉบับ" กัน original/augmented ของใบเดียวกัน
@@ -148,11 +147,11 @@ def main():
                 data_uri = image_to_data_uri(e["image_path"])
                 f.write(json.dumps(build_sample(e, data_uri), ensure_ascii=False) + "\n")
         size_mb = out_path.stat().st_size / 1024 / 1024
-        print(f"✓ {name}.jsonl: {len(subset)} samples ({size_mb:.1f} MB) -> {out_path}")
+        print(f"{name}.jsonl: {len(subset)} samples ({size_mb:.1f} MB) -> {out_path}")
 
-    print(f"\n✓ ข้าม test set: {skipped_test} samples (กัน data leakage, "
+    print(f"\nข้าม test set: {skipped_test} samples (กัน data leakage, "
           f"{len(test_ids)} ใบต้นฉบับ)")
-    print(f"✓ ใบต้นฉบับที่ใช้เทรน: {len(base_ids) - n_val} train / {n_val} val")
+    print(f"ใบต้นฉบับที่ใช้เทรน: {len(base_ids) - n_val} train / {n_val} val")
 
     # ── test.jsonl (สำหรับ evaluate.py) ──
     # ใช้รูป raw ต้นฉบับตรงๆ (ไม่ผ่าน augment) ให้สะท้อนภาพถ่ายจริงตอนใช้งาน
@@ -169,7 +168,7 @@ def main():
             sample["id"] = e["id"]
             f.write(json.dumps(sample, ensure_ascii=False) + "\n")
     size_mb = test_path.stat().st_size / 1024 / 1024
-    print(f"✓ test.jsonl: {len(test_entries)} samples ({size_mb:.1f} MB) -> {test_path}")
+    print(f"test.jsonl: {len(test_entries)} samples ({size_mb:.1f} MB) -> {test_path}")
 
 
 if __name__ == "__main__":

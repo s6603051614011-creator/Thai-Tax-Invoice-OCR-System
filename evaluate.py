@@ -38,10 +38,14 @@ from PIL import Image, ImageOps
 from tqdm import tqdm
 from jiwer import cer, wer   # pip install jiwer
 
-from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLProcessor, BitsAndBytesConfig
+from transformers import BitsAndBytesConfig
 from peft import PeftModel
 
 import schema   # single source of truth ของ field/type/canonical JSON
+
+# model/processor class เลือกอัตโนมัติตาม BASE_MODEL_ID (Qwen2.5-VL หรือ Qwen3-VL)
+ModelClass     = schema.get_model_class()
+ProcessorClass = schema.get_processor_class()
 
 
 # ══════════════════════════════════════════════
@@ -51,7 +55,7 @@ import schema   # single source of truth ของ field/type/canonical JSON
 class Config:
     # Paths
     TEST_JSONL:       str = "dataset/formatted/test.jsonl"
-    # ⚠ ต้องตรงกับ base ที่ adapter เทรนมา (schema = single source of truth)
+    # ต้องตรงกับ base ที่ adapter เทรนมา (schema = single source of truth)
     BASE_MODEL_ID:    str = schema.BASE_MODEL_ID
     FINETUNED_DIR:    str = "models/best_model"
     OUTPUT_DIR:       str = "results"
@@ -59,8 +63,8 @@ class Config:
     # Generation
     MAX_NEW_TOKENS:   int = 768          # JSON ใบหลายรายการ 512 อาจไม่พอ
     # image resolution ต้องตรงกับตอน train (Finetune.py) ไม่งั้น LoRA เพี้ยน
-    MIN_PIXELS:       int = 64 * 28 * 28
-    MAX_PIXELS:       int = 256 * 28 * 28
+    MIN_PIXELS:       int = 64 * 32 * 32
+    MAX_PIXELS:       int = 320 * 32 * 32
 
     # Fields ที่วัด Field Accuracy — ดึงจาก schema.py (scalar + summary)
     # items วัดแยกต่างหาก (calc_items_metrics)
@@ -188,9 +192,9 @@ def calc_items_metrics(pred_fields: dict, gt_fields: dict) -> dict:
 
 def load_model(model_type: str):
     """โหลด model ตาม type: 'baseline' หรือ 'finetuned'"""
-    print(f"\n📦 โหลด {model_type} model...")
+    print(f"\nโหลด {model_type} model...")
 
-    processor = Qwen2_5_VLProcessor.from_pretrained(
+    processor = ProcessorClass.from_pretrained(
         cfg.BASE_MODEL_ID,
         min_pixels=cfg.MIN_PIXELS,
         max_pixels=cfg.MAX_PIXELS,
@@ -208,7 +212,7 @@ def load_model(model_type: str):
     )
 
     if model_type == "baseline":
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+        model = ModelClass.from_pretrained(
             cfg.BASE_MODEL_ID,
             device_map={"": 0},
             quantization_config=bnb_config,
@@ -216,7 +220,7 @@ def load_model(model_type: str):
             trust_remote_code=True,
         )
     else:
-        base = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+        base = ModelClass.from_pretrained(
             cfg.BASE_MODEL_ID,
             device_map={"": 0},
             quantization_config=bnb_config,
@@ -226,7 +230,7 @@ def load_model(model_type: str):
         model = PeftModel.from_pretrained(base, cfg.FINETUNED_DIR)
 
     model.eval()
-    print(f"   ✓ โหลดสำเร็จ")
+    print(f"   โหลดสำเร็จ")
     return model, processor
 
 
@@ -273,7 +277,7 @@ def run_inference(model, processor, image_b64: str, system_prompt: str, user_pro
 
 def evaluate_model(model, processor, test_samples: list, model_name: str) -> list:
     """วัดผล model กับ test set ทั้งหมด"""
-    print(f"\n📊 Evaluating: {model_name}")
+    print(f"\nEvaluating: {model_name}")
     results = []
 
     for sample in tqdm(test_samples, desc=model_name):
@@ -290,7 +294,7 @@ def evaluate_model(model, processor, test_samples: list, model_name: str) -> lis
             pred_text = run_inference(model, processor, image_b64, sys_prompt, user_text)
         except Exception as e:
             pred_text = ""
-            print(f"  ⚠️  Error: {e}")
+            print(f"   Error: {e}")
 
         # parse JSON -> fields (ทนทานต่อ markdown fence / control char)
         pred_fields = schema.parse_model_json(pred_text)
@@ -431,7 +435,7 @@ def export_excel(baseline_sum: dict, ft_sum: dict, baseline_res: list, ft_res: l
     for i, (name, base_v, ft_v, higher_better, note) in enumerate(rows, 3):
         diff   = ft_v - base_v
         better = diff > 0 if higher_better else diff < 0
-        icon   = "✅" if better else ("➡️" if abs(diff) < 0.005 else "❌")
+        icon   = "" if better else ("" if abs(diff) < 0.005 else "")
 
         ws1.cell(row=i, column=1, value=name)
         val(ws1, i, 2, base_v, num_fmt)
@@ -452,7 +456,7 @@ def export_excel(baseline_sum: dict, ft_sum: dict, baseline_res: list, ft_res: l
 
         diff   = ft_fa - base_fa
         better = diff > 0
-        icon   = "✅" if better else ("➡️" if abs(diff) < 0.01 else "❌")
+        icon   = "" if better else ("" if abs(diff) < 0.01 else "")
 
         ws1.cell(row=i, column=1, value=fld["label"])
         val(ws1, i, 2, base_fa, num_fmt)
@@ -488,7 +492,7 @@ def export_excel(baseline_sum: dict, ft_sum: dict, baseline_res: list, ft_res: l
         ), 1)
 
         better = (fr["cer"] < br["cer"]) and (ft_fa >= base_fa)
-        icon   = "✅" if better else ("➡️" if abs(fr["cer"] - br["cer"]) < 0.01 else "❌")
+        icon   = "" if better else ("" if abs(fr["cer"] - br["cer"]) < 0.01 else "")
 
         row_data = [br["id"], br["cer"], fr["cer"], br["wer"], fr["wer"], base_fa, ft_fa, icon]
         for c_idx, v in enumerate(row_data, 1):
@@ -513,7 +517,7 @@ def export_excel(baseline_sum: dict, ft_sum: dict, baseline_res: list, ft_res: l
         ws3.column_dimensions[col].width = width
 
     wb.save(path)
-    print(f"\n📊 Export Excel → {path}")
+    print(f"\nExport Excel → {path}")
     return path
 
 
@@ -524,7 +528,7 @@ def export_excel(baseline_sum: dict, ft_sum: dict, baseline_res: list, ft_res: l
 def print_summary(baseline_sum: dict, ft_sum: dict):
     """แสดงผลสรุปใน terminal"""
     print(f"\n{'='*60}")
-    print(f"📊 ผลการประเมิน — Baseline vs Fine-tuned")
+    print(f"ผลการประเมิน — Baseline vs Fine-tuned")
     print(f"{'='*60}")
     print(f"{'Metric':<20} {'Baseline':>12} {'Fine-tuned':>12} {'ผลต่าง':>10}")
     print(f"{'─'*60}")
@@ -544,7 +548,7 @@ def print_summary(baseline_sum: dict, ft_sum: dict):
         f = ft_sum[key]
         d = f - b
         better = d > 0 if higher_better else d < 0
-        icon = "✅" if better else ("➡️" if abs(d) < 0.005 else "❌")
+        icon = "" if better else ("" if abs(d) < 0.005 else "")
         print(f"{label:<20} {b:>11.1%} {f:>11.1%} {d:>+10.1%} {icon}")
 
     print(f"\n{'─'*60}")
@@ -559,7 +563,7 @@ def print_summary(baseline_sum: dict, ft_sum: dict):
         if b is None or f is None:
             continue
         d    = f - b
-        icon = "✅" if d > 0.01 else ("➡️" if abs(d) <= 0.01 else "❌")
+        icon = "" if d > 0.01 else ("" if abs(d) <= 0.01 else "")
         print(f"  {fld['label']:<20} {b:>9.1%} {f:>9.1%} {d:>+7.1%} {icon}")
 
     print(f"{'='*60}")
@@ -572,19 +576,19 @@ def print_summary(baseline_sum: dict, ft_sum: dict):
 def main():
     # ตรวจสอบ
     if not Path(cfg.TEST_JSONL).exists():
-        print(f"❌ ไม่พบ {cfg.TEST_JSONL} — รัน format_dataset.py ก่อน")
+        print(f"ไม่พบ {cfg.TEST_JSONL} — รัน format_dataset.py ก่อน")
         return
 
     if not Path(cfg.FINETUNED_DIR).exists():
-        print(f"❌ ไม่พบ {cfg.FINETUNED_DIR} — รัน finetune.py ก่อน")
+        print(f"ไม่พบ {cfg.FINETUNED_DIR} — รัน finetune.py ก่อน")
         return
 
     if not torch.cuda.is_available():
-        print("❌ ไม่พบ GPU")
+        print("ไม่พบ GPU")
         return
 
     # โหลด test set
-    print("📂 โหลด Test Set...")
+    print("โหลด Test Set...")
     test_samples = []
     with open(cfg.TEST_JSONL, encoding="utf-8") as f:
         for line in f:
@@ -592,7 +596,7 @@ def main():
             if line:
                 test_samples.append(json.loads(line))
 
-    print(f"   ✓ {len(test_samples)} samples")
+    print(f"   {len(test_samples)} samples")
 
     Path(cfg.OUTPUT_DIR).mkdir(exist_ok=True)
 
@@ -631,9 +635,9 @@ def main():
             }
         }, f, ensure_ascii=False, indent=2)
 
-    print(f"📄 JSON results → {json_path}")
-    print(f"\n✅ Evaluation เสร็จแล้ว!")
-    print(f"   ใช้ผลลัพธ์จาก Excel ใส่ใน Thesis ได้เลยครับ 🎓")
+    print(f"JSON results → {json_path}")
+    print(f"\nEvaluation เสร็จแล้ว!")
+    print(f"   ใช้ผลลัพธ์จาก Excel ใส่ใน Thesis ได้เลยครับ")
 
 
 if __name__ == "__main__":

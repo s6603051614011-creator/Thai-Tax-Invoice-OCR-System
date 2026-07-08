@@ -259,8 +259,8 @@ def remove_border(img: np.ndarray, margin: int = Config.BORDER_MARGIN) -> np.nda
 # VLM-FRIENDLY PIPELINE (light touch) — สำหรับ Typhoon OCR / Qwen2.5-VL
 # ══════════════════════════════════════════════
 # หลักการ: VLM เทรนจากภาพสี/เทาธรรมชาติ -> "เพิ่มความอ่านง่าย" โดยไม่ทำลายข้อมูล
-#   ✓ แก้ orientation, deskew เบา, contrast เบา (คงสี), upscale, sharpen เบา
-#   ✗ ไม่ binarize, ไม่ denoise แรง (กันวรรณยุกต์/สระไทยพัง)
+#   แก้ orientation, deskew เบา, contrast เบา (คงสี), upscale, sharpen เบา
+#   ไม่ binarize, ไม่ denoise แรง (กันวรรณยุกต์/สระไทยพัง)
 VLM_TARGET_WIDTH = 1500
 
 
@@ -333,7 +333,7 @@ def preprocess_vlm(img_path: str, verbose: bool = True) -> np.ndarray:
     คืนภาพ 'สี' ที่อ่านง่ายขึ้นโดยไม่ทำลายเส้นภาษาไทย
     """
     if verbose:
-        print(f"\n📄 [VLM] Processing: {Path(img_path).name}")
+        print(f"\n[VLM] Processing: {Path(img_path).name}")
 
     bgr = load_oriented(img_path)
     bgr, angle = gentle_deskew(bgr)
@@ -343,7 +343,7 @@ def preprocess_vlm(img_path: str, verbose: bool = True) -> np.ndarray:
 
     if verbose:
         msg = f"หมุน {angle:.2f}°" if abs(angle) >= Config.DESKEW_THRESHOLD else "ตรงดีแล้ว"
-        print(f"  ✓ orientation + deskew ({msg}) + CLAHE สี + upscale + sharpen")
+        print(f"  orientation + deskew ({msg}) + CLAHE สี + upscale + sharpen")
     return bgr
 
 
@@ -359,10 +359,10 @@ def process_batch_vlm(input_dir: str, output_dir: str):
         list(input_path.glob("*.png"))
     )
     if not images:
-        print(f"❌ ไม่พบรูปภาพใน {input_dir}")
+        print(f"ไม่พบรูปภาพใน {input_dir}")
         return
 
-    print(f"📁 [VLM mode] พบ {len(images)} ไฟล์ → ประมวลผล...\n")
+    print(f"[VLM mode] พบ {len(images)} ไฟล์ → ประมวลผล...\n")
     success, failed = 0, 0
     for img_path in images:
         try:
@@ -371,12 +371,12 @@ def process_batch_vlm(input_dir: str, output_dir: str):
                         [cv2.IMWRITE_JPEG_QUALITY, 95])
             success += 1
         except Exception as e:
-            print(f"  ❌ {img_path.name}: {e}")
+            print(f"  {img_path.name}: {e}")
             failed += 1
 
     print(f"\n{'='*40}")
-    print(f"✅ สำเร็จ: {success} ไฟล์" + (f" | ❌ {failed}" if failed else ""))
-    print(f"📁 Output → {output_dir}")
+    print(f"สำเร็จ: {success} ไฟล์" + (f" | {failed}" if failed else ""))
+    print(f"Output → {output_dir}")
 
 
 # ══════════════════════════════════════════════
@@ -394,7 +394,7 @@ def preprocess(img_path: str, save_steps: bool = False, output_dir: str = None) 
     Returns:
         numpy array ของภาพที่ผ่าน preprocessing แล้ว
     """
-    print(f"\n📄 Processing: {Path(img_path).name}")
+    print(f"\nProcessing: {Path(img_path).name}")
     
     # โหลดรูป
     img = cv2.imread(str(img_path))
@@ -407,40 +407,40 @@ def preprocess(img_path: str, save_steps: bool = False, output_dir: str = None) 
     # ─── Step 1: Resize ───
     img = resize_normalize(img)
     steps["1_resize"] = img.copy()
-    print(f"  ✓ Resize: {original_shape[1]}x{original_shape[0]} → {img.shape[1]}x{img.shape[0]}")
+    print(f"  Resize: {original_shape[1]}x{original_shape[0]} → {img.shape[1]}x{img.shape[0]}")
 
     # ─── Step 2: Grayscale ───
     gray = to_grayscale(img)
     steps["2_grayscale"] = gray.copy()
-    print(f"  ✓ Grayscale")
+    print(f"  Grayscale")
 
     # ─── Step 3: Contrast Enhancement ───
     enhanced = enhance_contrast(gray)
     steps["3_contrast"] = enhanced.copy()
-    print(f"  ✓ Contrast Enhancement (CLAHE)")
+    print(f"  Contrast Enhancement (CLAHE)")
 
     # ─── Step 4: Noise Removal ───
     denoised = remove_noise(enhanced)
     steps["4_denoised"] = denoised.copy()
-    print(f"  ✓ Noise Removal")
+    print(f"  Noise Removal")
 
     # ─── Step 5: Binarization ───
     binary = binarize(denoised)
     steps["5_binary"] = binary.copy()
-    print(f"  ✓ Binarization (Adaptive Threshold)")
+    print(f"  Binarization (Adaptive Threshold)")
 
     # ─── Step 6: Deskew ───
     deskewed, angle = deskew(binary)
     steps["6_deskewed"] = deskewed.copy()
     if abs(angle) >= Config.DESKEW_THRESHOLD:
-        print(f"  ✓ Deskew: หมุน {angle:.2f}°")
+        print(f"  Deskew: หมุน {angle:.2f}°")
     else:
-        print(f"  ✓ Deskew: ภาพตรงดีแล้ว ({angle:.2f}°)")
+        print(f"  Deskew: ภาพตรงดีแล้ว ({angle:.2f}°)")
 
     # ─── Step 7: Border Removal ───
     final = remove_border(deskewed)
     steps["7_final"] = final.copy()
-    print(f"  ✓ Border Removal: {deskewed.shape[1]}x{deskewed.shape[0]} → {final.shape[1]}x{final.shape[0]}")
+    print(f"  Border Removal: {deskewed.shape[1]}x{deskewed.shape[0]} → {final.shape[1]}x{final.shape[0]}")
 
     # บันทึก steps (ถ้าต้องการ)
     if save_steps and output_dir:
@@ -449,7 +449,7 @@ def preprocess(img_path: str, save_steps: bool = False, output_dir: str = None) 
         step_dir.mkdir(parents=True, exist_ok=True)
         for step_name, step_img in steps.items():
             cv2.imwrite(str(step_dir / f"{step_name}.jpg"), step_img)
-        print(f"  💾 บันทึก steps → {step_dir}/")
+        print(f"  บันทึก steps → {step_dir}/")
 
     return final
 
@@ -468,10 +468,10 @@ def process_batch(input_dir: str, output_dir: str):
              list(input_path.glob("*.png"))
     
     if not images:
-        print(f"❌ ไม่พบรูปภาพใน {input_dir}")
+        print(f"ไม่พบรูปภาพใน {input_dir}")
         return
     
-    print(f"📁 พบ {len(images)} ไฟล์ → ประมวลผล...\n")
+    print(f"พบ {len(images)} ไฟล์ → ประมวลผล...\n")
     success, failed = 0, 0
     
     for img_path in images:
@@ -481,14 +481,14 @@ def process_batch(input_dir: str, output_dir: str):
             cv2.imwrite(str(out_path), result)
             success += 1
         except Exception as e:
-            print(f"  ❌ Error: {e}")
+            print(f"  Error: {e}")
             failed += 1
     
     print(f"\n{'='*40}")
-    print(f"✅ สำเร็จ: {success} ไฟล์")
+    print(f"สำเร็จ: {success} ไฟล์")
     if failed:
-        print(f"❌ ผิดพลาด: {failed} ไฟล์")
-    print(f"📁 Output → {output_dir}")
+        print(f"ผิดพลาด: {failed} ไฟล์")
+    print(f"Output → {output_dir}")
 
 
 # ══════════════════════════════════════════════
@@ -496,7 +496,7 @@ def process_batch(input_dir: str, output_dir: str):
 # ══════════════════════════════════════════════
 def run_demo():
     """สร้างภาพจำลองและทดสอบ pipeline"""
-    print("🧪 Demo Mode: สร้างใบกำกับจำลอง\n")
+    print("Demo Mode: สร้างใบกำกับจำลอง\n")
     
     # สร้างภาพจำลองใบกำกับ
     img = np.ones((800, 600, 3), dtype=np.uint8) * 240
@@ -534,8 +534,8 @@ def run_demo():
     cv2.imwrite(str(out_path), result)
     
     print(f"\n{'='*40}")
-    print(f"✅ Demo เสร็จแล้ว!")
-    print(f"📁 ดูผลลัพธ์ที่: {demo_output_dir}/")
+    print(f"Demo เสร็จแล้ว!")
+    print(f"ดูผลลัพธ์ที่: {demo_output_dir}/")
     print(f"   - demo_result.jpg     → ผลลัพธ์สุดท้าย")
     print(f"   - demo_invoice_steps/ → ผลแต่ละ step")
     
@@ -566,7 +566,7 @@ if __name__ == "__main__":
         Path(args.output).mkdir(parents=True, exist_ok=True)
         out = Path(args.output) / Path(args.input).name
         cv2.imwrite(str(out), result, [cv2.IMWRITE_JPEG_QUALITY, 95])
-        print(f"\n✅ บันทึกแล้ว → {out}")
+        print(f"\nบันทึกแล้ว → {out}")
 
     elif args.batch:
         # Batch mode

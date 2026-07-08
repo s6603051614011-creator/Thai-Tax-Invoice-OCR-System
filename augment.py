@@ -126,7 +126,7 @@ def augment_image(pil_img: Image.Image, pipeline_name: str, pipeline) -> Image.I
         result = pipeline(image=rgb)
         return cv_to_pil(cv2.cvtColor(result["image"], cv2.COLOR_RGB2BGR))
     except Exception as e:
-        print(f"\n  ⚠️  Pipeline '{pipeline_name}' error: {e} → ใช้ต้นฉบับแทน")
+        print(f"\n   Pipeline '{pipeline_name}' error: {e} → ใช้ต้นฉบับแทน")
         return pil_img
 
 
@@ -137,11 +137,11 @@ def augment_image(pil_img: Image.Image, pipeline_name: str, pipeline) -> Image.I
 def run_augmentation():
     # ตรวจสอบไฟล์
     if not ANNOTATIONS.exists():
-        print(f"❌ ไม่พบ {ANNOTATIONS}")
+        print(f"ไม่พบ {ANNOTATIONS}")
         return
 
     if not RAW_DIR.exists():
-        print(f"❌ ไม่พบโฟลเดอร์ {RAW_DIR}")
+        print(f"ไม่พบโฟลเดอร์ {RAW_DIR}")
         return
 
     # โหลด annotations
@@ -159,10 +159,10 @@ def run_augmentation():
     # สรุปก่อนเริ่ม
     verified_count = sum(1 for a in annotations if a.get("verified"))
     prep_count = len(list(PREP_DIR.glob("*"))) if PREP_DIR.exists() else 0
-    print(f"📋 Annotations ทั้งหมด: {len(annotations)} | Verified: {verified_count}")
-    print(f"📂 รูปใน raw/:          {len(raw_index)} ไฟล์")
-    print(f"📂 รูปใน preprocessed/: {prep_count} ไฟล์")
-    print(f"🔄 คาดว่าจะได้:         {verified_count * (AUGMENT_PER_IMAGE + 1)} ใบ\n")
+    print(f"Annotations ทั้งหมด: {len(annotations)} | Verified: {verified_count}")
+    print(f"รูปใน raw/:          {len(raw_index)} ไฟล์")
+    print(f"รูปใน preprocessed/: {prep_count} ไฟล์")
+    print(f"คาดว่าจะได้:         {verified_count * (AUGMENT_PER_IMAGE + 1)} ใบ\n")
 
     augmented_entries = []
     skip_no_ann   = 0
@@ -200,7 +200,7 @@ def run_augmentation():
         try:
             pil_img = open_image(source_path)
         except Exception as e:
-            print(f"\n  ❌ เปิดรูปไม่ได้ {filename}: {e}")
+            print(f"\n  เปิดรูปไม่ได้ {filename}: {e}")
             skip_no_file += 1
             continue
 
@@ -233,34 +233,34 @@ def run_augmentation():
 
     print(f"""
 {'='*50}
-✅ Augmentation เสร็จสิ้น!
+Augmentation เสร็จสิ้น!
 
-📊 ผลลัพธ์:
+ผลลัพธ์:
    ต้นฉบับ (test set):          {n_orig} ใบ
    Augmented (preprocessed):    {n_from_prep} ใบ
    Augmented (raw fallback):    {n_from_raw} ใบ
    รวมทั้งหมด:                  {len(augmented_entries)} ใบ
 
-⏭️  ข้าม:
+ ข้าม:
    ไม่มี annotation:  {skip_no_ann} ไฟล์
    ยังไม่ Verified:   {skip_no_verify} ไฟล์
    เปิดรูปไม่ได้:    {skip_no_file} ไฟล์
 
-📁 Output:
+Output:
    รูปภาพ → {AUG_DIR}/
    Labels  → {AUG_LABELS_OUT}
 {'='*50}""")
 
     if n_from_raw > 0:
-        print(f"\n💡 มี {n_from_raw} ใบที่ใช้รูปดิบ (raw)")
+        print(f"\nมี {n_from_raw} ใบที่ใช้รูปดิบ (raw)")
         print(f"   รัน preprocess.py ก่อนเพื่อผลที่ดีที่สุดครับ")
 
     if skip_no_verify > 0:
-        print(f"\n⚠️  มี {skip_no_verify} ใบที่ยังไม่ Verified")
+        print(f"\n มี {skip_no_verify} ใบที่ยังไม่ Verified")
         print(f"   เปิด Annotation Tool → Verify → Export ใหม่ แล้วรัน augment.py อีกครั้ง")
 
     if len(augmented_entries) == 0:
-        print("\n❌ ไม่ได้รูปเลย — ตรวจสอบ:")
+        print("\nไม่ได้รูปเลย — ตรวจสอบ:")
         print("   1. ชื่อไฟล์รูปใน dataset/raw/ ตรงกับ image_path ใน annotations.json ไหม")
         print("   2. มี verified: true อย่างน้อย 1 entry ไหม")
 
