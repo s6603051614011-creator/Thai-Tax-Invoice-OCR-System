@@ -17,6 +17,7 @@ import argparse
 from datetime import date
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # หา schema.py ที่ project root
 import schema
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

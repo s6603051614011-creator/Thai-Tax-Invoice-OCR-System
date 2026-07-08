@@ -1,0 +1,33 @@
+# Thai Tax Invoice OCR — core dependencies
+# ติดตั้ง: pip install -r requirements.txt
+#
+# หมายเหตุ torch/torchvision: ติดตั้งแยกให้ตรงกับ CUDA ของเครื่องก่อน เช่น
+#   pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+# (เวอร์ชันด้านล่างคือที่ทดสอบใช้งานจริงบน RTX 4050 6GB / CUDA 12.1)
+
+# ── Model / training (QLoRA fine-tune) ──
+torch>=2.5.1
+torchvision>=0.20.1
+transformers>=5.6.2          # ต้อง >=5.x เพื่อรองรับ Qwen3-VL (typhoon-ocr1.5)
+peft>=0.19.1
+bitsandbytes>=0.49.1         # 4-bit NF4 quantization
+accelerate>=1.13.0
+datasets>=2.21.0
+trl>=0.15.0
+qwen-vl-utils>=0.0.14
+
+# ── Data / images ──
+pillow>=11.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+albumentations>=2.0.8        # augmentation pipeline
+pyarrow>=16                  # ต้อง >=16 ให้เข้ากับ numpy 2.x (ไม่งั้น Trainer import พัง)
+
+# ── Evaluation / reporting ──
+jiwer>=4.0.0                 # CER / WER
+openpyxl>=3.1.5              # export Excel
+requests>=2.31.0             # เรียก Typhoon API (eval_typhoon*.py)
+tqdm>=4.67.0
+
+# ── Baseline เทียบ (ไม่บังคับ) ──
+pytesseract>=0.3.13          # ต้องติดตั้ง Tesseract OCR แยก + tha.traineddata (ดู eval_tesseract.py)

@@ -24,6 +24,7 @@ try:
 except Exception:
     pass
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # หา schema.py ที่ project root
 import schema
 
 TEXT_FIELDS = ["seller_name_th", "seller_name_en", "seller_address",

@@ -24,6 +24,8 @@ import threading
 from pathlib import Path
 from flask import Flask, jsonify, request, send_file, abort
 
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))  # หา schema.py ที่ project root
 import schema
 
 # ── Config ───────────────────────────────────────────────

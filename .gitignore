@@ -3,6 +3,9 @@
 __pycache__/
 *.pyc
 
+# Run logs (regenerable — train/eval/smoke output)
+*.log
+
 # Large model checkpoints
 models/
 dataset/models/
@@ -14,7 +17,10 @@ dataset/preprocessed/
 dataset/formatted/
 input/
 results/
-typhoon_compare_examples.html   # embeds real invoice images as base64
+
+# Comparison pages embed real invoice images as base64 — keep local only
+typhoon_compare_examples.html
+model_compare_2b_vs_3b.html
 
 # Tesseract language data (downloaded, not repo content)
 .tessdata/

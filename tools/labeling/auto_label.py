@@ -23,6 +23,8 @@ from tqdm import tqdm
 from PIL import Image, ImageOps
 from io import BytesIO
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # หา schema.py ที่ project root
 import schema  # single source of truth ของโครงสร้างเฉลย
 
 

@@ -6,8 +6,9 @@ review.py แล้ว label ผ่าน API ได้ทันที (ทั�
 
 รัน: python make_empty_entries.py
 """
-import sys, json, re, glob, os
+import sys, json, re, glob, os, pathlib
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))  # หา schema.py ที่ project root
 import schema
 
 PATH = "dataset/annotations_auto.json"
