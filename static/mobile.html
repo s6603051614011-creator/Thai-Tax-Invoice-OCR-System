@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>OCR ใบกำกับภาษี</title>
+<style>
+  :root {
+    --bg: #f4f6f5; --surface: #fff; --text: #16211f; --muted: #5b6b68;
+    --border: #dbe3e1; --accent: #0e7c86; --accent-soft: #e4f2f1;
+    --good: #1d8a4a; --bad: #b3261e; --warn: #a15c00; --warn-bg: #fff3cd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0d1413; --surface:#131c1b; --text:#e7f0ee; --muted:#93a19e;
+      --border:#223330; --accent:#4dd4c4; --accent-soft:#163330;
+      --good:#4ade80; --bad:#f87171; --warn:#facc15; --warn-bg:#3a2f0a; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Leelawadee UI", "Noto Sans Thai", "Segoe UI", system-ui, sans-serif;
+    padding: 16px; padding-bottom: 60px;
+  }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 0.85rem; margin: 0 0 18px; }
+
+  .picker {
+    background: var(--surface); border: 2px dashed var(--border); border-radius: 12px;
+    padding: 24px 16px; text-align: center; margin-bottom: 14px;
+  }
+  .picker input[type=file] { display: none; }
+  .picker label {
+    display: inline-block; background: var(--accent); color: #fff; font-weight: 600;
+    padding: 12px 24px; border-radius: 999px; cursor: pointer; font-size: 1rem;
+  }
+  .picker .count { margin-top: 10px; color: var(--muted); font-size: 0.9rem; }
+
+  button#uploadBtn {
+    width: 100%; padding: 14px; font-size: 1.05rem; font-weight: 700;
+    background: var(--accent); color: #fff; border: none; border-radius: 10px;
+    margin-bottom: 20px; cursor: pointer;
+  }
+  button#uploadBtn:disabled { opacity: 0.5; }
+
+  .progress-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 20px; display: none;
+  }
+  .progress-bar { height: 8px; background: var(--border); border-radius: 999px; overflow: hidden; margin-top: 8px; }
+  .progress-bar > div { height: 100%; background: var(--accent); width: 0%; transition: width .3s; }
+  .progress-text { font-size: 0.9rem; color: var(--muted); }
+  .progress-eta { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 14px; overflow: hidden;
+  }
+  .card-head {
+    padding: 10px 14px; background: var(--accent-soft); display: flex;
+    justify-content: space-between; align-items: center; font-weight: 600; font-size: 0.9rem;
+  }
+  .card-head .time { color: var(--muted); font-weight: 400; font-size: 0.8rem; }
+  .card-body { padding: 4px 14px 12px; }
+  .flag-banner {
+    background: var(--warn-bg); color: var(--warn); font-size: 0.82rem;
+    padding: 8px 12px; margin: 8px 0; border-radius: 8px;
+  }
+  .flag-banner div { margin: 2px 0; }
+  .row { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); align-items: baseline; }
+  .row:last-child { border-bottom: none; }
+  .row .label { flex: 0 0 118px; font-size: 0.78rem; color: var(--muted); }
+  .row input {
+    flex: 1; font-size: 0.9rem; border: 1px solid transparent; background: transparent;
+    color: var(--text); font-family: inherit; padding: 2px 4px; border-radius: 4px; min-width: 0;
+  }
+  .row input:focus { border-color: var(--accent); background: var(--surface); outline: none; }
+  .items-title { font-size: 0.8rem; color: var(--accent); font-weight: 700; margin: 10px 0 4px; }
+  table.items { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  table.items th, table.items td { padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: left; }
+  table.items th { color: var(--muted); font-weight: 600; font-size: 0.72rem; }
+  table.items input {
+    width: 100%; font-size: 0.82rem; border: 1px solid transparent; background: transparent;
+    color: var(--text); font-family: inherit; padding: 2px 4px; border-radius: 4px; min-width: 60px;
+  }
+  table.items input:focus { border-color: var(--accent); background: var(--surface); outline: none; }
+  .card.error .card-head { background: #fde2e1; color: var(--bad); }
+  .spinner {
+    display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite;
+    vertical-align: middle; margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<h1>OCR ใบกำกับภาษีไทย</h1>
+<p class="sub">เลือกรูปที่ถ่ายไว้ได้เรื่อยๆ (กดเลือกซ้ำเพื่อเพิ่มเข้าคิว ไม่ต้องเลือกรวมทีเดียว) แล้วกดอัปโหลด ระบบจะประมวลผลทีละใบ</p>
+
+<div class="picker">
+  <input type="file" id="fileInput" accept="image/*" multiple>
+  <label for="fileInput">📷 เลือกรูปใบกำกับภาษี</label>
+  <div class="count" id="fileCount">ยังไม่ได้เลือกรูป</div>
+</div>
+
+<button id="uploadBtn" disabled>อัปโหลดและประมวลผล</button>
+
+<div class="progress-wrap" id="progressWrap">
+  <div class="progress-text" id="progressText">กำลังประมวลผล 0/0</div>
+  <div class="progress-bar"><div id="progressFill"></div></div>
+  <div class="progress-eta" id="progressEta"></div>
+</div>
+
+<div id="results"></div>
+
+<script>
+let META = null;
+let queue = [];          // ไฟล์ที่รอประมวลผล -- เลือกเพิ่มได้เรื่อยๆ ไม่ถูกแทนที่
+let isProcessing = false; // กันกดอัปโหลดซ้ำตอนรอบก่อนยังไม่เสร็จ (เคยยิงซ้อนกัน)
+let cardSeq = 0;
+
+const fileInput   = document.getElementById('fileInput');
+const fileCount   = document.getElementById('fileCount');
+const uploadBtn   = document.getElementById('uploadBtn');
+const progressWrap= document.getElementById('progressWrap');
+const progressText= document.getElementById('progressText');
+const progressFill= document.getElementById('progressFill');
+const progressEta = document.getElementById('progressEta');
+const resultsEl   = document.getElementById('results');
+
+fetch('/meta').then(r => r.json()).then(m => { META = m; }).catch(() => {});
+
+function updatePicker() {
+  fileCount.textContent = queue.length
+    ? `รอประมวลผล ${queue.length} รูป` + (isProcessing ? ' (กำลังทำงานอยู่ รูปใหม่จะต่อคิวให้)' : '')
+    : (isProcessing ? 'กำลังประมวลผล...' : 'ยังไม่ได้เลือกรูป');
+  uploadBtn.disabled = queue.length === 0 || isProcessing;
+}
+
+fileInput.addEventListener('change', () => {
+  // เพิ่มเข้าคิวแทนการแทนที่ -- เลือกรูปหลายรอบได้ ไม่ต้องเลือกรวมทีเดียว
+  queue.push(...Array.from(fileInput.files));
+  fileInput.value = ''; // เคลียร์ input เพื่อให้เลือกไฟล์เดิมซ้ำได้อีกถ้าต้องการ
+  updatePicker();
+});
+
+uploadBtn.addEventListener('click', async () => {
+  // กันชนกัน: ถ้ากำลังประมวลผลอยู่แล้ว การกดซ้ำจะไม่มีผล (uploadBtn ก็ disabled
+  // อยู่แล้วระหว่างทำงาน แต่กันไว้อีกชั้นเผื่อ event ยิงซ้ำ)
+  if (isProcessing || queue.length === 0) return;
+  isProcessing = true;
+  updatePicker();
+  progressWrap.style.display = 'block';
+
+  const times = [];
+  let doneCount = 0;
+
+  // ดึงจากคิวไปเรื่อยๆ จนว่าง -- ถ้าผู้ใช้เพิ่มรูปใหม่เข้ามาระหว่างนี้
+  // (fileInput ยังกดเลือกได้ตลอด) จะถูกดึงมาทำต่อในลูปเดียวกันอัตโนมัติ
+  while (queue.length > 0) {
+    const file = queue.shift();
+    const total = doneCount + queue.length + 1;
+    progressText.textContent = `กำลังประมวลผล ${doneCount + 1}/${total}: ${file.name}`;
+    progressFill.style.width = `${(doneCount / total) * 100}%`;
+
+    if (times.length > 0) {
+      const avg = times.reduce((a, b) => a + b, 0) / times.length;
+      progressEta.textContent = `เหลืออีกประมาณ ${Math.round(avg * (queue.length + 1))} วินาที`;
+    } else {
+      progressEta.textContent = 'กำลังโหลดโมเดล (ใบแรกอาจช้ากว่าปกติ)...';
+    }
+
+    const card = renderPendingCard(file.name, cardSeq++);
+    resultsEl.appendChild(card); // ต่อท้ายผลลัพธ์เดิม ไม่ล้างของเก่า
+
+    const t0 = performance.now();
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/ocr', { method: 'POST', body: form });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      times.push((performance.now() - t0) / 1000);
+      card.replaceWith(renderResultCard(file.name, data));
+    } catch (e) {
+      times.push((performance.now() - t0) / 1000);
+      card.replaceWith(renderErrorCard(file.name, e.message));
+    }
+    doneCount++;
+    updatePicker();
+  }
+
+  progressFill.style.width = '100%';
+  progressText.textContent = `เสร็จแล้ว ${doneCount}/${doneCount} ใบ`;
+  progressEta.textContent = '';
+  isProcessing = false;
+  updatePicker();
+});
+
+function renderPendingCard(filename, idx) {
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.id = `card-${idx}`;
+  div.innerHTML = `
+    <div class="card-head"><span><span class="spinner"></span>${escapeHtml(filename)}</span></div>
+    <div class="card-body" style="padding:14px;color:var(--muted);font-size:0.85rem;">กำลังอ่าน...</div>`;
+  return div;
+}
+
+function renderErrorCard(filename, message) {
+  const div = document.createElement('div');
+  div.className = 'card error';
+  div.innerHTML = `
+    <div class="card-head">${escapeHtml(filename)}</div>
+    <div class="card-body" style="padding:14px;color:var(--bad);font-size:0.85rem;">
+      อ่านไม่สำเร็จ: ${escapeHtml(message)}
+    </div>`;
+  return div;
+}
+
+function renderResultCard(filename, data) {
+  const div = document.createElement('div');
+  div.className = 'card';
+  const f = data.fields || {};
+
+  let flagsHtml = '';
+  if (data.flags && data.flags.length) {
+    flagsHtml = '<div class="flag-banner">' +
+      '<strong>⚠ ควรตรวจสอบ:</strong>' +
+      data.flags.map(x => `<div>• ${escapeHtml(x)}</div>`).join('') +
+      '</div>';
+  }
+
+  const scalarRows = (META ? META.scalar_fields : []).map(fld =>
+    `<div class="row"><span class="label">${escapeHtml(fld.label)}</span>
+      <input data-key="${fld.key}" value="${escapeHtml(f[fld.key] || '')}"></div>`
+  ).join('');
+
+  const summaryRows = (META ? META.summary_fields : []).map(fld =>
+    `<div class="row"><span class="label">${escapeHtml(fld.label)}</span>
+      <input data-key="${fld.key}" value="${escapeHtml(f[fld.key] || '')}"></div>`
+  ).join('');
+
+  let itemsHtml = '';
+  const items = f.items || [];
+  if (items.length && META) {
+    const cols = META.item_fields;
+    itemsHtml = '<div class="items-title">รายการสินค้า</div><table class="items"><thead><tr>' +
+      cols.map(c => `<th>${escapeHtml(c.label)}</th>`).join('') + '</tr></thead><tbody>' +
+      items.map((it, r) => '<tr>' + cols.map(c =>
+        `<td><input data-item-row="${r}" data-key="${c.key}" value="${escapeHtml(it[c.key] || '')}"></td>`
+      ).join('') + '</tr>').join('') +
+      '</tbody></table>';
+  }
+
+  div.innerHTML = `
+    <div class="card-head">
+      <span>${escapeHtml(filename)}</span>
+      <span class="time">${data.elapsed_sec != null ? data.elapsed_sec.toFixed(1) + ' วิ' : ''}</span>
+    </div>
+    <div class="card-body">
+      ${flagsHtml}
+      ${scalarRows}
+      ${itemsHtml}
+      ${summaryRows}
+    </div>`;
+  return div;
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  }[c]));
+}
+</script>
+</body>
+</html>

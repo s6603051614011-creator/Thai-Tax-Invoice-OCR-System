@@ -521,13 +521,15 @@ def test_inference(model_path: str, image_path: str):
     inputs = processor(text=[text], images=[image], return_tensors="pt").to("cuda")
 
     print("กำลัง generate...", flush=True)
+    # ต้องตรงกับ evaluate.py::run_inference เป๊ะ (ตัวที่ใช้วัด Field Accuracy จริง)
+    # -- repetition_penalty/no_repeat_ngram_size (ของเดิม) ห้ามโมเดลพูดคีย์ JSON ซ้ำ
+    # (unit_price/discount/amount) ทำให้ใบที่มี >=2 รายการสินค้า JSON พังทุกครั้ง
+    # พบจาก api.py ตอนทดสอบใช้งานจริง แก้ให้เหมือน eval แล้ว
     with torch.no_grad():
         output_ids = model.generate(
             **inputs,
             max_new_tokens=768,
             do_sample=False,
-            repetition_penalty=1.3,      # เพิ่มจาก 1.1 → 1.3
-            no_repeat_ngram_size=5,      # ห้ามซ้ำ n-gram ขนาด 5
             pad_token_id=processor.tokenizer.eos_token_id,
 )
 
