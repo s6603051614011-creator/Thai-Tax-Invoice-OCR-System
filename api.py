@@ -52,7 +52,15 @@ ProcessorClass = schema.get_processor_class()
 # ── Config ───────────────────────────────────────────────
 ADAPTER_DIR     = os.environ.get("ADAPTER_DIR", "models/best_model")
 HF_TOKEN        = os.environ.get("HF_TOKEN") or None
-MAX_NEW_TOKENS  = 768
+# ── เพดานความยาวคำตอบ: 1536 (ไม่ใช่ 768 เดิม) ──
+# 768 ทำให้ใบที่มีรายการสินค้าเยอะ output ถูกตัดกลางคัน -> JSON ปิดวงเล็บไม่ครบ ->
+# parse ไม่ผ่าน -> schema.parse_model_json คืนค่าว่างทุกช่อง = เสียทั้งใบ
+# วัดจริงกับ 2 ใบที่พังใน test set (inv_095 11 รายการ, inv_272 7 รายการ):
+#   @768  -> generate ครบ 768 ชนเพดานพอดี, JSON พัง, ได้ 0/10 ช่อง ทั้งคู่
+#   @1536 -> generate 860/805 แล้วจบเอง, JSON ผ่าน, ได้ 9/10 และ 8/10 ช่อง
+# ขยายเพดานไม่มีต้นทุน: โมเดลหยุดเองที่ EOS อยู่แล้ว ใบปกติ (~200-400 tokens)
+# จึงไม่ช้าลงเลย และ KV cache ที่เพิ่มมาเป็นหลัก MB บนโมเดล 2B
+MAX_NEW_TOKENS  = 1536
 MIN_PIXELS      = 64 * 32 * 32     # ต้องตรงกับตอน train (Finetune.py) -- Qwen3-VL 32px/token
 # ── ความละเอียด: 960 tokens (ไม่ใช่ 2048 เดิม) ──
 # เดิมตั้ง 2048 เพราะทดสอบบน test set 50 ใบ (รูป landscape/สแกน) แล้วดัน Field

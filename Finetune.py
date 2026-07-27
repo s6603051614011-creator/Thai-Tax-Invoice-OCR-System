@@ -528,7 +528,7 @@ def test_inference(model_path: str, image_path: str):
     with torch.no_grad():
         output_ids = model.generate(
             **inputs,
-            max_new_tokens=768,
+            max_new_tokens=1536,
             do_sample=False,
             pad_token_id=processor.tokenizer.eos_token_id,
 )

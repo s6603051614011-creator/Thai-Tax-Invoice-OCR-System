@@ -61,7 +61,9 @@ class Config:
     OUTPUT_DIR:       str = "results"
 
     # Generation
-    MAX_NEW_TOKENS:   int = 768          # JSON ใบหลายรายการ 512 อาจไม่พอ
+    # 768 ไม่พอสำหรับใบที่มีรายการสินค้าเยอะ -> output ถูกตัด -> JSON พัง -> เสียทั้งใบ
+    # (2/50 ใบใน test set: inv_095, inv_272 ดูรายละเอียดที่ api.py::MAX_NEW_TOKENS)
+    MAX_NEW_TOKENS:   int = 1536
     # image resolution ต้องตรงกับตอน train (Finetune.py) ไม่งั้น LoRA เพี้ยน
     MIN_PIXELS:       int = 64 * 32 * 32
     MAX_PIXELS:       int = 320 * 32 * 32
