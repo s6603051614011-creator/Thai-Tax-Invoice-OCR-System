@@ -36,13 +36,14 @@ from PIL import Image, ImageOps
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
+from pydantic import BaseModel
 
 from transformers import BitsAndBytesConfig
 from peft import PeftModel
 
 import schema  # single source of truth: BASE_MODEL_ID + prompt + parser
 import postprocess
-from master_list import build_master, apply_master
+from master_list import build_master_live, apply_master, save_verified
 
 # model/processor class เลือกอัตโนมัติตาม BASE_MODEL_ID (Qwen2.5-VL หรือ Qwen3-VL)
 ModelClass     = schema.get_model_class()
@@ -119,9 +120,13 @@ def load_model():
         trust_remote_code=True, token=HF_TOKEN,
     )
 
-    print("สร้างตารางอ้างอิงคู่ค้า (จาก train เท่านั้น กัน data leakage)...", flush=True)
-    master_seller = build_master("seller")
-    master_buyer  = build_master("buyer")
+    # build_master_live() อ่านจาก master_db (SQLite) -- seed ครั้งแรกจาก train
+    # เท่านั้น (กัน data leakage เหมือนเดิม) แต่หลังจากนั้นโตขึ้นเรื่อยๆ จากพนักงาน
+    # กดยืนยัน/แก้ไขข้อมูลจริงผ่าน POST /confirm (ต่างจาก build_master() ที่ eval
+    # script ใช้ ซึ่งอ่านจากไฟล์ train ตรงๆ ทุกครั้ง ไม่โต เพื่อให้ผลวัด reproduce ได้)
+    print("โหลดตารางอ้างอิงคู่ค้า (seed จาก train + ข้อมูลที่ยืนยันแล้วจากการใช้งานจริง)...", flush=True)
+    master_seller = build_master_live("seller")
+    master_buyer  = build_master_live("buyer")
     print(f"   ผู้ขาย {len(master_seller)} ราย, ผู้ซื้อ {len(master_buyer)} ราย", flush=True)
 
     STATE.update(model=model, processor=processor, device="cuda", loaded=True,
@@ -261,15 +266,26 @@ async def ocr(file: UploadFile = File(...)):
             "raw_output": result["raw"],
             "flags": ["โมเดลตอบไม่ถูกรูปแบบ JSON -- ลองถ่ายใหม่ให้ชัดขึ้น/ตรงขึ้น หรือกรอกด้วยมือ"],
             "master_list_fixes": [],
+            "master_list_match": {},
         })
 
     # เติม/แก้ tax_id + address จากตารางอ้างอิงคู่ค้า (เชื่อโมเดลก่อนเสมอ
     # -- ดูนโยบายระมัดระวังใน master_list.apply_master)
-    fields, ml_changes = apply_master(
+    fields, ml_changes, master_match = apply_master(
         result["fields"], STATE["master_seller"], STATE["master_buyer"])
 
     # ตรวจความสมเหตุสมผล (checksum เลขภาษี + เลขคณิตใบกำกับ) ไม่ต้องมีเฉลย
     flags = postprocess.validate_fields(fields)
+
+    # แจ้งเตือนกรณีค่าที่โมเดลอ่านได้ต่างจากที่เคยบันทึกในตารางอ้างอิง (type="notice"
+    # ใน apply_master) -- ไม่ทับค่า แค่บอกผู้ใช้ให้เช็คทานเป็นพิเศษ
+    for ch in ml_changes:
+        if ch.get("type") == "notice":
+            flags.append(
+                f"{schema.LABELS.get(ch['field'], ch['field'])} ของ \"{ch['matched_name']}\" "
+                f"ที่อ่านได้ ({ch['model_value']}) ต่างจากที่เคยบันทึกไว้ ({ch['master_value']}) "
+                f"-- กรุณาตรวจสอบ"
+            )
 
     return JSONResponse({
         "filename": file.filename,
@@ -279,7 +295,45 @@ async def ocr(file: UploadFile = File(...)):
         "raw_output": result["raw"],
         "flags": flags,
         "master_list_fixes": ml_changes,
+        # ผลเทียบกับฐานข้อมูลของทุกช่อง (ไม่ใช่แค่ตอนมีปัญหา) -- ให้ frontend
+        # โชว์ % ความมั่นใจต่อผู้ใช้ได้ เช่น "ชื่อผู้ขาย ตรงกับฐานข้อมูล 100%"
+        "master_list_match": master_match,
     })
+
+
+class ConfirmRequest(BaseModel):
+    seller_name_th: str = ""
+    seller_name_en: str = ""
+    seller_tax_id: str = ""
+    seller_address: str = ""
+    buyer_name_th: str = ""
+    buyer_name_en: str = ""
+    buyer_tax_id: str = ""
+    buyer_address: str = ""
+
+
+@app.post("/confirm")
+def confirm(body: ConfirmRequest):
+    """บันทึกข้อมูลคู่ค้า (ชื่อ/ที่อยู่/เลขภาษี เท่านั้น) ที่ผู้ใช้ตรวจ/แก้ไขแล้วลง
+    master_db ถาวร -- ใช้ได้ทั้งบริษัทใหม่ (เพิ่มรายการ) และบริษัทเก่า (แก้ให้ตรงปัจจุบัน)
+    เรียกจากปุ่ม "บันทึก" ต่อใบในหน้าเว็บ หลังผู้ใช้ตรวจทานเสร็จ"""
+    if not STATE["loaded"]:
+        raise HTTPException(503, detail="โมเดลยังไม่พร้อม")
+
+    saved = []
+    for side in ("seller", "buyer"):
+        name_th = getattr(body, f"{side}_name_th").strip()
+        if not name_th:
+            continue
+        save_verified(side, name_th, getattr(body, f"{side}_name_en"),
+                     getattr(body, f"{side}_tax_id"), getattr(body, f"{side}_address"))
+        saved.append(side)
+
+    # รีเฟรชตารางในหน่วยความจำทันที -- ไม่ต้อง restart server ก็เห็นผลตั้งแต่ใบถัดไป
+    STATE["master_seller"] = build_master_live("seller")
+    STATE["master_buyer"]  = build_master_live("buyer")
+
+    return {"saved": saved}
 
 
 @app.get("/meta")

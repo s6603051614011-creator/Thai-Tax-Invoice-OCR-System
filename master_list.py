@@ -16,8 +16,8 @@ master_list.py -- ตารางอ้างอิงคู่ค้า (ชื
 
 ใช้:
     from master_list import build_master, apply_master
-    master = build_master()              # สร้างจาก train
-    fixed  = apply_master(fields, master)  # เติม/แก้ฟิลด์ที่ lookup ได้
+    master = build_master()                          # สร้างจาก train
+    fixed, changes, match_info = apply_master(fields, master)  # เติม/แก้ + ผลเทียบ
 """
 
 import re
@@ -90,6 +90,28 @@ def build_master(side: str = "seller") -> dict:
     return master
 
 
+def build_master_live(side: str = "seller") -> dict:
+    """เหมือน build_master() แต่อ่านจาก master_db (SQLite) แทนไฟล์ train เฉยๆ
+    -- ใช้ใน api.py (production) เท่านั้น ห้ามใช้ใน eval script
+
+    ต่างจาก build_master(): ข้อมูลใน DB โตขึ้นเรื่อยๆ จากพนักงานกดยืนยัน/แก้ไข
+    ระหว่างใช้งานจริง (ดูเหตุผลที่ต้องแยกใน master_db.py) ผลลัพธ์จึงไม่ reproduce
+    ตายตัวเหมือน build_master() ห้ามใช้กับ eval_combined.py/eval_hires_infer.py
+    """
+    import master_db
+    return master_db.load_master(side)
+
+
+def save_verified(side: str, name_th: str, name_en: str, tax_id: str, address: str) -> None:
+    """บันทึกข้อมูลที่ผู้ใช้ตรวจ/แก้ไขแล้วลง master_db ถาวร (เรียกจาก POST /confirm)
+    -- ใช้ทั้งกรณีบริษัทใหม่ (เพิ่มรายการ) และบริษัทเก่า (แก้ไขให้ตรงปัจจุบัน)"""
+    import master_db
+    key = norm_name(name_th)
+    if not key:
+        return
+    master_db.save_entry(side, key, name_th or "", name_en or "", tax_id or "", address or "")
+
+
 def lookup(name: str, master: dict, threshold: float = NAME_MATCH_THRESHOLD):
     """หาผู้ขายในตารางจากชื่อที่โมเดลอ่านได้ (fuzzy) -- คืน (entry, score) หรือ (None, 0)"""
     key = norm_name(name)
@@ -121,11 +143,25 @@ def apply_master(fields: dict, master_seller: dict, master_buyer: dict = None,
                 (ถ้า checksum ผ่าน = โมเดลอ่านมาถูก ให้เชื่อโมเดล)
       address : เติมเฉพาะช่องว่าง ไม่เขียนทับของเดิม
 
-    คืน (fields ชุดใหม่, รายการที่แก้)
+    *** แจ้งเตือนเมื่อค่าต่างจากที่เคยบันทึกไว้ (ไม่ทับ แค่เตือน) ***
+    แม้ไม่เข้าเงื่อนไขทับด้านบน ถ้าค่าที่โมเดลอ่านได้ไม่ตรงกับที่ตารางมี (เช่น
+    บริษัทย้ายที่อยู่ใหม่ หรือเลขภาษีที่เคยบันทึกผิดมาแต่แรก) ก็ยังใส่เข้า
+    changes เป็น type="notice" ให้ผู้ใช้เห็นและตัดสินใจเอง -- ค่าที่แสดงในฟอร์ม
+    ยังเป็นค่าที่โมเดลอ่านได้เหมือนเดิม ไม่เปลี่ยนพฤติกรรมการทับ
+
+    *** match_info: โชว์ผลเทียบกับฐานข้อมูลให้ผู้ใช้เห็นทุกครั้ง (ไม่ใช่แค่ตอนมีปัญหา) ***
+    ต่างจาก changes (ซึ่งมีแค่ตอน "แก้" หรือ "เตือน") -- match_info คืนผลเทียบของ
+    ทุกฟิลด์เสมอ แม้ตรงกันสนิทดี เพื่อให้ผู้ใช้เห็นระดับความมั่นใจ ไม่ใช่แค่ตอนมีปัญหา:
+      name_match_pct : % ความคล้ายชื่อ (fuzzy) กับชื่อที่เคยบันทึกไว้ ตรงเป๊ะ = 100
+      tax_id_match / address_match : "match" (ตรงกับฐานข้อมูล) / "mismatch" (ไม่ตรง)
+                                     / "no_data" (ฐานข้อมูลไม่มีข้อมูลนี้ให้เทียบ)
+
+    คืน (fields ชุดใหม่, รายการที่แก้/แจ้งเตือน, match_info ต่อฝั่ง)
     """
     out = dict(fields)
     out["items"] = list(fields.get("items") or [])
     changes = []
+    match_info = {}
 
     for side, master in (("seller", master_seller), ("buyer", master_buyer)):
         if not master:
@@ -133,6 +169,8 @@ def apply_master(fields: dict, master_seller: dict, master_buyer: dict = None,
         name = out.get(f"{side}_name_th", "")
         entry, score = lookup(name, master, threshold)
         if not entry:
+            match_info[side] = {"matched": False, "matched_name": None, "name_match_pct": None,
+                                "tax_id_match": "no_data", "address_match": "no_data"}
             continue
 
         # ── tax_id: ทับเฉพาะตอนที่คำตอบโมเดลเชื่อไม่ได้ ──
@@ -142,10 +180,15 @@ def apply_master(fields: dict, master_seller: dict, master_buyer: dict = None,
         if new and new != old:
             status = thai_tax_id_status(old)
             # ว่าง / ผิดรูป / checksum ไม่ผ่าน -> เชื่อตารางอ้างอิง
-            # valid หรือ legacy(10 หลัก) -> เชื่อโมเดล (มันอ่านมาได้จริง)
+            # valid หรือ legacy(10 หลัก) -> เชื่อโมเดล (มันอ่านมาได้จริง) แค่เตือน
             if status in ("empty", "malformed", "checksum"):
                 out[key] = new
-                changes.append({"field": key, "old": old, "new": new, "reason": f"tax_id {status}",
+                changes.append({"type": "fix", "field": key, "old": old, "new": new,
+                                "reason": f"tax_id {status}",
+                                "matched_name": entry["name_th"], "score": round(score, 3)})
+            else:
+                changes.append({"type": "notice", "field": key, "model_value": old,
+                                "master_value": new, "reason": f"tax_id {status} แต่ต่างจากที่เคยบันทึก",
                                 "matched_name": entry["name_th"], "score": round(score, 3)})
 
         # ── address: เติมเฉพาะช่องว่าง (บริษัทมีหลายสาขา ห้ามทับ) ──
@@ -154,10 +197,32 @@ def apply_master(fields: dict, master_seller: dict, master_buyer: dict = None,
         old = (out.get(key) or "").strip()
         if new and not old:
             out[key] = new
-            changes.append({"field": key, "old": old, "new": new, "reason": "address ว่าง",
+            changes.append({"type": "fix", "field": key, "old": old, "new": new,
+                            "reason": "address ว่าง",
+                            "matched_name": entry["name_th"], "score": round(score, 3)})
+        elif new and old and new != old:
+            # ที่อยู่ต่างจากที่เคยบันทึก (อาจเป็นคนละสาขา หรือย้ายที่อยู่จริง) -- แค่เตือน ไม่ทับ
+            changes.append({"type": "notice", "field": key, "model_value": old,
+                            "master_value": new, "reason": "address ต่างจากที่เคยบันทึก",
                             "matched_name": entry["name_th"], "score": round(score, 3)})
 
-    return out, changes
+        # ── สรุปผลเทียบให้ผู้ใช้เห็นเสมอ (เทียบค่าสุดท้ายหลังผ่าน fix ด้านบนแล้ว) ──
+        def _field_status(field: str) -> str:
+            ref_val = (entry.get(field) or "").strip()
+            cur_val = (out.get(f"{side}_{field}") or "").strip()
+            if not ref_val:
+                return "no_data"
+            return "match" if cur_val == ref_val else "mismatch"
+
+        match_info[side] = {
+            "matched": True,
+            "matched_name": entry["name_th"],
+            "name_match_pct": round(score * 100, 1),
+            "tax_id_match": _field_status("tax_id"),
+            "address_match": _field_status("address"),
+        }
+
+    return out, changes, match_info
 
 
 if __name__ == "__main__":

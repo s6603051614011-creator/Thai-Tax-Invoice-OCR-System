@@ -69,7 +69,7 @@ def main():
         comb = {}
         n_fix = 0
         for i, p in base.items():
-            fixed, ch = apply_master(p, ms, mb)
+            fixed, ch, _ = apply_master(p, ms, mb)
             comb[i] = fixed
             n_fix += len(ch)
 

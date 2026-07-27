@@ -65,7 +65,7 @@ def main():
     for id_, gt_txt, pred_txt in rows:
         gt = schema.parse_model_json(gt_txt)
         pr = schema.parse_model_json(pred_txt or "")
-        fixed, changes = apply_master(pr, master_seller, master_buyer, args.threshold)
+        fixed, changes, _ = apply_master(pr, master_seller, master_buyer, args.threshold)
         gts[id_], before[id_], after[id_] = gt, pr, fixed
         if changes:
             n_invoices_touched += 1

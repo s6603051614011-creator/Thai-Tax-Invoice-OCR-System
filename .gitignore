@@ -18,6 +18,10 @@ dataset/formatted/
 input/
 results/
 
+# Master list DB (production only) — seeds from train then grows with real
+# supplier data confirmed by staff; machine-local state, not repo content
+dataset/master_list.db
+
 # Comparison pages embed real invoice images as base64 — keep local only
 typhoon_compare_examples.html
 model_compare_2b_vs_3b.html
