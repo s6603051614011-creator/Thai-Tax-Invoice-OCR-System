@@ -1,11 +1,27 @@
 """
-eval_error_breakdown.py -- แยกสาเหตุที่ field ผิด: "เจอแต่อ่านผิด" กับ "ไม่เจอเลย"
+eval_error_breakdown.py -- แยกสาเหตุที่ผิด: JSON พัง / เจอแต่อ่านผิด / ไม่เจอเลย
 =====================================================================
 Field Accuracy เพียวๆ บอกแค่ "ถูกกี่ %" ไม่บอกว่าที่ผิดนั้นผิดแบบไหน -- อาจารย์
-ขอแยกให้ชัดว่าในส่วนที่ผิด โมเดล "เห็นแล้วอ่านผิด" (ตอบมาแต่ไม่ตรง) กับ
-"ไม่เห็นเลย" (ตอบว่างเปล่า) มีสัดส่วนเท่าไหร่ -- สองแบบนี้ต้องแก้คนละทาง:
-  เจอแต่อ่านผิด -> ปัญหาความคมชัด/OCR (แก้ด้วย hi-res, preprocessing)
-  ไม่เจอเลย     -> ปัญหาความเข้าใจ/ตำแหน่ง (แก้ด้วยข้อมูลเทรนเพิ่ม)
+ขอแยกให้ชัด เพราะแต่ละแบบต้องแก้คนละทาง:
+
+  1. JSON พังทั้งใบ  -> โมเดลอ่านได้แต่ "พูดออกมาผิดรูปแบบ" จน parse ไม่ผ่าน
+                        แก้ด้วย constrained decoding / retry / เทรนให้ตอบ JSON นิ่งขึ้น
+  2. เจอแต่อ่านผิด   -> โมเดลหา field เจอ ตอบมา แต่อ่านตัวอักษรผิด
+                        แก้ด้วยความละเอียดภาพ / preprocessing / คุณภาพรูปถ่าย
+  3. ไม่เจอเลย       -> โมเดลตอบว่าง ไม่รู้ว่าต้องมองหาอะไร/ตรงไหน
+                        แก้ด้วยข้อมูลเทรนเพิ่ม
+
+*** ทำไมต้องแยกหมวด 1 ออกมา (สำคัญ) ***
+schema.parse_model_json() คืน empty_record() เงียบๆ เมื่อ parse JSON ไม่ผ่าน
+-> ทุก field ของใบนั้นกลายเป็นค่าว่างหมด -> ถูกนับปนเป็น "ไม่เจอเลย" ทั้งใบ
+วัดจริงที่ 960 tok พบว่า 23 จาก 29 ช่องที่ "ไม่เจอ" (79%) มาจากใบแค่ 2 ใบที่ JSON
+พัง ไม่ใช่โมเดลหา field ไม่เจอ -- ถ้าไม่แยกออกมา จะสรุปสาเหตุผิดและแก้ผิดทาง
+
+วิธีตรวจ: ใบที่ SCALAR_FIELDS ว่างหมดทุกช่อง = ถือว่า JSON พัง ใช้เกณฑ์เดียวกับ
+api.py (ตัวแปร json_ok ใน route /ocr) ให้สอดคล้องกับที่ production ใช้จริง
+ข้อจำกัด: hires_preds.json เก็บผลที่ parse แล้ว ไม่ได้เก็บ raw output จึงตรวจ
+ย้อนหลังได้แค่ด้วย heuristic นี้ (ใบที่โมเดลตอบว่างจริงทุกช่องจะถูกนับปนมาด้วย
+แต่ในทางปฏิบัติแทบเป็นไปไม่ได้ที่ใบจริงจะว่างครบทั้ง 10 ช่อง)
 
 ใช้คำตอบดิบจาก results/hires_preds.json (ที่ eval_hires_infer.py เซฟไว้) วัดที่
 ความละเอียดเดียวกับที่ใช้งานจริงใน api.py (960 tokens) แล้วรวม Master List เข้าไป
@@ -43,6 +59,15 @@ def load_gt() -> dict:
     return gts
 
 
+def find_broken_json(preds: dict) -> list:
+    """คืน id ของใบที่ถือว่า JSON พัง -- เกณฑ์เดียวกับ api.py::ocr (json_ok)
+    คือ SCALAR_FIELDS ว่างหมดทุกช่อง"""
+    return sorted(
+        i for i, p in preds.items()
+        if not any(p.get(k) for k in schema.SCALAR_FIELDS)
+    )
+
+
 def classify(preds: dict, gts: dict) -> dict:
     """คืน dict: field_key -> {"n":.., "correct":.., "wrong":.., "missing":..}
     n = จำนวนใบที่ GT ไม่ว่าง (ฟิลด์นี้มีคำตอบจริงให้เทียบ)
@@ -70,6 +95,17 @@ def classify(preds: dict, gts: dict) -> dict:
     return result
 
 
+def macro(br: dict) -> dict:
+    """ค่าเฉลี่ยแบบถ่วงน้ำหนักเท่ากันทุกฟิลด์ (macro-average)
+    -- วิธีเดียวกับที่ evaluate.py ใช้รายงาน "Field Accuracy" ตัวหลัก"""
+    fields = [br[k] for fld in cfg.FIELDS if (k := fld["key"]) in br]
+    return {
+        "correct": sum(c["correct"] / c["n"] for c in fields) / len(fields),
+        "wrong":   sum(c["wrong"]   / c["n"] for c in fields) / len(fields),
+        "missing": sum(c["missing"] / c["n"] for c in fields) / len(fields),
+    }
+
+
 def print_table(title: str, br: dict) -> dict:
     print(f"\n=== {title} ===")
     W = 10
@@ -92,18 +128,13 @@ def print_table(title: str, br: dict) -> dict:
     print(f"{'รวม (ถ่วงตามจำนวนช่อง)':<24}{n:>{W}}{tot['correct']:>{W}}{tot['correct']/n:>{W}.1%}"
          f"{tot['wrong']:>{W}}{tot['wrong']/n:>{W}.1%}{tot['missing']:>{W}}{tot['missing']/n:>{W}.1%}")
 
-    # ── ค่าเฉลี่ยแบบถ่วงน้ำหนักเท่ากันทุกฟิลด์ (macro-average) ──
-    # นี่คือวิธีเดียวกับที่ evaluate.py ใช้รายงาน "Field Accuracy" ตัวหลัก (เช่น 64.3%)
     # ต่างจากแถวด้านบนซึ่งถ่วงตามจำนวนตัวอย่างของแต่ละฟิลด์ (ฟิลด์ที่มีน้อยใบ เช่น
     # "ชื่อลูกค้า (อังกฤษ)" n=2 มีน้ำหนักเท่าฟิลด์ที่มี n=50 ในสูตรนี้) -- สองค่าจะไม่
     # เท่ากัน เจตนา ไม่ใช่ error ให้ใช้แถวนี้เทียบกับตัวเลขที่เคยรายงานอาจารย์
-    fields = [br[k] for fld in cfg.FIELDS if (k := fld["key"]) in br]
-    macro_correct = sum(c["correct"] / c["n"] for c in fields) / len(fields)
-    macro_wrong   = sum(c["wrong"]   / c["n"] for c in fields) / len(fields)
-    macro_missing = sum(c["missing"] / c["n"] for c in fields) / len(fields)
-    print(f"{'เฉลี่ยต่อฟิลด์ (=Field Acc)':<24}{'':>{W}}{'':>{W}}{macro_correct:>{W}.1%}"
-         f"{'':>{W}}{macro_wrong:>{W}.1%}{'':>{W}}{macro_missing:>{W}.1%}")
-    tot["macro_correct"], tot["macro_wrong"], tot["macro_missing"] = macro_correct, macro_wrong, macro_missing
+    m = macro(br)
+    print(f"{'เฉลี่ยต่อฟิลด์ (=Field Acc)':<24}{'':>{W}}{'':>{W}}{m['correct']:>{W}.1%}"
+         f"{'':>{W}}{m['wrong']:>{W}.1%}{'':>{W}}{m['missing']:>{W}.1%}")
+    tot["macro"] = m
     return tot
 
 
@@ -125,25 +156,69 @@ def main():
 
     gts = load_gt()
     preds_raw = all_preds[res]
+    n_total = len(preds_raw)
 
-    # ── ก่อน Master List (โมเดลอ่านล้วนๆ) ──
-    br_raw = classify(preds_raw, gts)
-    tot_raw = print_table(f"{res} tokens -- โมเดลอ่านล้วนๆ (ยังไม่รวม Master List)", br_raw)
+    # ── หมวด 1: JSON พังทั้งใบ (แยกออกก่อน ไม่งั้นไปโผล่ปนใน "ไม่เจอเลย") ──
+    broken = find_broken_json(preds_raw)
+    ok_ids = [i for i in preds_raw if i not in set(broken)]
 
-    # ── หลัง Master List (ตรงกับที่ api.py ใช้งานจริง) ──
+    print(f"\n{'='*70}")
+    print(f"หมวดที่ 1 -- JSON พังทั้งใบ (parse ไม่ผ่าน ทุกช่องเลยว่างหมด)")
+    print(f"{'='*70}")
+    print(f"  {len(broken)}/{n_total} ใบ ({len(broken)/n_total:.1%})"
+         + (f" -> {', '.join(broken)}" if broken else ""))
+    print("  สาเหตุคนละแบบกับ 'ไม่เจอ field' -- โมเดลอาจอ่านได้หมดแล้ว แต่ตอบผิดรูปแบบ")
+
     ms, mb = build_master("seller"), build_master("buyer")
-    preds_ml = {i: apply_master(p, ms, mb)[0] for i, p in preds_raw.items()}
-    br_ml = classify(preds_ml, gts)
-    tot_ml = print_table(f"{res} tokens + Master List -- ตรงกับที่ใช้งานจริงใน api.py", br_ml)
 
-    print(f"\nสรุป (Field Accuracy เฉลี่ยต่อฟิลด์ -- ตัวที่ใช้รายงาน): "
-         f"{res} tok เพียวๆ ถูก {tot_raw['macro_correct']:.1%} -> "
-         f"หลังรวม Master List ถูก {tot_ml['macro_correct']:.1%} "
-         f"({tot_ml['macro_correct'] - tot_raw['macro_correct']:+.1%})")
+    def with_ml(subset_ids):
+        sub = {i: preds_raw[i] for i in subset_ids}
+        return {i: apply_master(p, ms, mb)[0] for i, p in sub.items()}
 
-    out = {"resolution": res,
-          "before_master_list": {"per_field": br_raw, "total": tot_raw},
-          "after_master_list": {"per_field": br_ml, "total": tot_ml}}
+    # ── ตารางหลัก: เฉพาะใบที่ JSON ใช้ได้ (สัญญาณจริงของหมวด 2 กับ 3) ──
+    br_ok_raw = classify({i: preds_raw[i] for i in ok_ids}, gts)
+    print_table(f"หมวด 2-3 -- {res} tok โมเดลอ่านล้วนๆ "
+               f"(เฉพาะ {len(ok_ids)} ใบที่ JSON ใช้ได้)", br_ok_raw)
+
+    br_ok_ml = classify(with_ml(ok_ids), gts)
+    tot_ok_ml = print_table(f"หมวด 2-3 -- {res} tok + Master List = ที่ใช้งานจริงใน api.py "
+                           f"(เฉพาะ {len(ok_ids)} ใบที่ JSON ใช้ได้)", br_ok_ml)
+
+    # ── ตารางเทียบ: รวมใบ JSON พังด้วย (= ตัวเลขชุดที่เคยรายงานไปก่อนแก้) ──
+    br_all_ml = classify(with_ml(list(preds_raw)), gts)
+    tot_all_ml = print_table(f"[เทียบ] {res} tok + Master List รวมใบ JSON พังด้วย "
+                            f"(ทั้ง {n_total} ใบ -- ตัวเลขชุดเดิมก่อนแยกหมวด 1)", br_all_ml)
+
+    # ── สรุป ──
+    mo, ma = tot_ok_ml["macro"], tot_all_ml["macro"]
+    print(f"\n{'='*70}")
+    print("สรุปสำหรับรายงาน (ที่ใช้งานจริง: {} tok + Master List)".format(res))
+    print(f"{'='*70}")
+    print(f"  หมวด 1 JSON พังทั้งใบ : {len(broken)}/{n_total} ใบ ({len(broken)/n_total:.1%})")
+    print(f"  จากใบที่เหลือ {len(ok_ids)} ใบ:")
+    print(f"    ถูก              : {mo['correct']:.1%}")
+    print(f"    หมวด 2 อ่านผิด   : {mo['wrong']:.1%}  (เจอ field แต่อ่านตัวอักษรผิด)")
+    print(f"    หมวด 3 ไม่เจอเลย : {mo['missing']:.1%}  (ตอบว่าง)")
+    print()
+    print(f"  เทียบกับถ้านับรวมใบ JSON พัง: ถูก {ma['correct']:.1%} | "
+         f"อ่านผิด {ma['wrong']:.1%} | ไม่เจอ {ma['missing']:.1%}")
+    print(f"  -> ใบ JSON พังทำให้ '%ไม่เจอ' ดูสูงเกินจริง "
+         f"{ma['missing'] - mo['missing']:+.1%} (นับดิบ {tot_all_ml['missing'] - tot_ok_ml['missing']} ช่อง)")
+
+    out = {
+        "resolution": res,
+        "n_total": n_total,
+        "json_broken": {"ids": broken, "count": len(broken), "rate": len(broken) / n_total},
+        "valid_only": {  # ตัวเลขที่ควรใช้รายงาน
+            "n_invoices": len(ok_ids),
+            "before_master_list": {"per_field": br_ok_raw, "macro": macro(br_ok_raw)},
+            "after_master_list":  {"per_field": br_ok_ml,  "macro": macro(br_ok_ml)},
+        },
+        "including_broken": {  # ชุดเดิม เก็บไว้เทียบ
+            "n_invoices": n_total,
+            "after_master_list": {"per_field": br_all_ml, "macro": macro(br_all_ml)},
+        },
+    }
     out_path = Path(f"results/error_breakdown_{res}.json")
     out_path.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"\nบันทึก -> {out_path}")
