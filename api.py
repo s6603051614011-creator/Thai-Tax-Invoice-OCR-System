@@ -27,6 +27,7 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import io
 import time
+import asyncio
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -36,6 +37,7 @@ from PIL import Image, ImageOps
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from transformers import BitsAndBytesConfig
@@ -86,6 +88,22 @@ STATIC_DIR      = Path(__file__).parent / "static"
 # global model state
 STATE = {"model": None, "processor": None, "device": None, "loaded": False, "error": None,
          "master_seller": None, "master_buyer": None}
+
+# ══════════════════════════════════════════════
+# คิวใช้ GPU -- อ่านได้ทีละใบเท่านั้น
+# ══════════════════════════════════════════════
+# การ์ดมี VRAM 6GB, อ่าน 1 ใบใช้ ~4GB -> สองใบพร้อมกันล้นแน่นอน
+#
+# ก่อนหน้านี้ระบบ "รอด" มาได้เพราะบังเอิญ: route เป็น async def แต่ run_ocr()
+# เป็นฟังก์ชัน blocking ธรรมดา -> มันบล็อก event loop ทั้งเส้นตอนทำงาน คำขอที่ 2
+# จึงเข้ามาไม่ได้เลย ผลข้างเคียงคือ /health ก็ตอบไม่ได้ตลอด 40-140 วิด้วย และถ้า
+# ใครแก้ async def -> def (ซึ่งถูกตามหลัก FastAPI สำหรับงาน blocking) threadpool
+# จะรันขนานกันทันที = VRAM ล้น โดยไม่มีอะไรในโค้ดเตือนไว้เลย
+#
+# จึงเขียนเจตนาลงไปตรงๆ: semaphore ใบเดียว + ย้าย inference ไป threadpool
+# -> กัน GPU ชนกันแบบตั้งใจ, event loop ว่างตอบ /health ได้, และบอกความยาวคิวได้
+GPU_SEMAPHORE = asyncio.Semaphore(1)
+QUEUE = {"waiting": 0, "busy": False}
 
 
 def load_model():
@@ -232,6 +250,9 @@ def health():
         "adapter": ADAPTER_DIR if os.path.isdir(ADAPTER_DIR) else None,
         "cuda": torch.cuda.is_available(),
         "error": STATE["error"],
+        # สถานะคิว -- ตอบได้ตลอดแม้กำลังอ่านใบอยู่ (inference ไปอยู่ threadpool แล้ว)
+        "busy": QUEUE["busy"],
+        "queue_waiting": QUEUE["waiting"],
     }
 
 
@@ -251,14 +272,36 @@ async def ocr(file: UploadFile = File(...)):
     img = _cap_image_size(img)
     img = _maybe_preprocess(img)
 
-    t0 = time.time()
+    # ── เข้าคิวใช้ GPU (ทีละใบ) ──
+    # run_in_threadpool ย้าย inference ที่ blocking ออกจาก event loop -> /health และ
+    # คำขออื่นยังตอบได้ระหว่างอ่าน ส่วน semaphore เป็นตัวกันไม่ให้ชนกันบน GPU
+    t_queued = time.time()
+    QUEUE["waiting"] += 1
+    still_waiting = True           # ยังติดหนี้ลดตัวนับอยู่ไหม (กันลดซ้ำ/ลดของคนอื่น)
     try:
-        result = run_ocr(img)
-    except torch.cuda.OutOfMemoryError:
-        torch.cuda.empty_cache()
-        raise HTTPException(507, detail="VRAM ไม่พอ — ลองลดขนาดรูปหรือ MAX_PIXELS")
-    except Exception as e:
-        raise HTTPException(500, detail=f"inference error: {e}")
+        async with GPU_SEMAPHORE:
+            QUEUE["waiting"] -= 1
+            still_waiting = False
+            QUEUE["busy"] = True
+            t0 = time.time()
+            try:
+                result = await run_in_threadpool(run_ocr, img)
+            except torch.cuda.OutOfMemoryError:
+                torch.cuda.empty_cache()
+                raise HTTPException(507, detail="VRAM ไม่พอ — ลองลดขนาดรูปหรือ MAX_PIXELS")
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(500, detail=f"inference error: {e}")
+            finally:
+                QUEUE["busy"] = False
+    finally:
+        # หลุดออกไปก่อนได้คิว (client ตัดการเชื่อมต่อระหว่างรอ) ก็ต้องคืนตัวนับ
+        # ไม่งั้น waiting ค้างเพิ่มขึ้นเรื่อยๆ จนเลขคิวที่โชว์ผู้ใช้เพี้ยน
+        if still_waiting:
+            QUEUE["waiting"] -= 1
+
+    queued_sec = round(t0 - t_queued, 2)
 
     # schema.parse_model_json คืนค่าว่างเงียบๆ ถ้าโมเดลตอบ JSON ผิดรูปแบบ (เกิดได้
     # ~0-2% ของใบ ตามที่วัดไว้) -- เช็คแยกก่อนเอาไปใช้ต่อ กันฟอร์มว่างเปล่าไม่บอกอะไร
@@ -269,6 +312,7 @@ async def ocr(file: UploadFile = File(...)):
         return JSONResponse({
             "filename": file.filename,
             "elapsed_sec": round(time.time() - t0, 2),
+            "queued_sec": queued_sec,
             "fields": result["fields"],
             "canonical_json": schema.build_canonical_json(result["fields"]),
             "raw_output": result["raw"],
@@ -298,6 +342,9 @@ async def ocr(file: UploadFile = File(...)):
     return JSONResponse({
         "filename": file.filename,
         "elapsed_sec": round(time.time() - t0, 2),
+        # เวลาที่รอคิว GPU ก่อนได้เริ่มอ่านจริง (0 = ได้คิวทันที) -- แยกจาก
+        # elapsed_sec เพื่อให้ frontend บอกผู้ใช้ได้ว่าช้าเพราะรอคิวหรือเพราะอ่านนาน
+        "queued_sec": queued_sec,
         "fields": fields,
         "canonical_json": schema.build_canonical_json(fields),
         "raw_output": result["raw"],
