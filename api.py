@@ -124,13 +124,22 @@ def load_model():
         bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=torch.bfloat16,
     )
+    # ต้องตรงกับ evaluate.py::load_model() เป๊ะ -- ที่นั่นไม่ได้ระบุ attn_implementation
+    # เลย ปล่อยให้ transformers auto-select ซึ่งวัดแล้วมันเลือก "sdpa" เสมอสำหรับ
+    # โมเดลนี้ ในขณะที่ไฟล์นี้เคยล็อกไว้ที่ "eager" ตรงๆ -- ตัวเลข Field Accuracy
+    # ทุกตัวที่รายงานอาจารย์ไป (69.9% ที่ 960 tok, ก่อนหน้านี้ก็เช่นกัน) วัดด้วย
+    # sdpa มาตลอด แต่ api.py (ระบบที่ใช้งานจริง) กลับใช้ eager มาตลอดโดยไม่ตั้งใจ
+    # -- เพิ่งพบจาก benchmark เทียบ 5 ใบ: คำตอบต่างกันจริง ไม่ใช่แค่เร็วขึ้น (เช่น
+    # inv_095 eager อ่านชื่อบริษัทผิดเป็นคนละบริษัท sdpa อ่านถูก) เปลี่ยนเป็น sdpa
+    # ให้ production ตรงกับตัวเลขที่วัดไว้จริงๆ เสียที + ได้เร็วขึ้น ~2 เท่า และ
+    # VRAM เหลือเยอะขึ้น (~2.1GB จาก ~3.7GB ที่ 960 tok) เป็นผลพลอยได้
     base = ModelClass.from_pretrained(
         schema.BASE_MODEL_ID,
         device_map={"": 0},
         quantization_config=bnb,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
-        attn_implementation="eager",
+        attn_implementation="sdpa",
         token=HF_TOKEN,
     )
 
