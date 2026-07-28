@@ -302,6 +302,12 @@
   input.bad { background: var(--red-soft); border-color: var(--red); }
   input.bad:focus { box-shadow: 0 0 0 3px rgba(229,53,43,.15); }
   .src-badge { flex: 0 0 auto; font-size: 0.65rem; padding: 2px 8px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); cursor: help; white-space: nowrap; font-weight: 600; }
+  /* ป้ายบอกว่าช่องนี้ตรงกับฐานข้อมูลคู่ค้าไหม -- มาจาก master_list_match ที่ /ocr
+     ส่งมาทุกใบ (ไม่ใช่เฉพาะตอนมีปัญหาแบบ flags) ให้รู้ว่าช่องไหนเชื่อได้เลย */
+  .db-badge { flex: 0 0 auto; font-size: 0.65rem; padding: 2px 8px; border-radius: 999px; cursor: help; white-space: nowrap; font-weight: 600; }
+  .db-badge.match    { background: var(--green-soft); color: var(--green); }
+  .db-badge.mismatch { background: var(--amber-soft); color: var(--amber); }
+  .db-badge.newone   { background: var(--surface-3); color: var(--muted); }
 
   .items-title { font-size: 0.73rem; color: var(--muted); font-weight: 700; margin: 16px 0 7px; letter-spacing: .04em; }
   .items-scroll { overflow-x: auto; }
@@ -1065,7 +1071,8 @@ function buildForm(rec, data) {
     t.className = 'group-title';
     t.textContent = g.title;
     form.appendChild(t);
-    for (const fld of g.fields) form.appendChild(buildRow(fld, f[fld.key] || '', fixByField[fld.key]));
+    for (const fld of g.fields)
+      form.appendChild(buildRow(fld, f[fld.key] || '', fixByField[fld.key], data.master_list_match));
   }
   if (!itemsPlaced) form.appendChild(buildItemsTable(f.items || []));
 
@@ -1079,12 +1086,36 @@ function buildForm(rec, data) {
   return form;
 }
 
-function buildRow(fld, value, fix) {
+/**
+ * ป้ายเทียบกับฐานข้อมูลคู่ค้า จาก master_list_match ของ /ocr
+ * แสดงเฉพาะ 3 ช่องที่ฐานข้อมูลรู้จัก (ชื่อไทย / เลขภาษี / ที่อยู่) ของแต่ละฝั่ง
+ * ช่องที่ฐานข้อมูลไม่มีข้อมูลเทียบ (no_data) ไม่ต้องขึ้นป้าย จะได้ไม่รก
+ */
+function dbBadge(key, match) {
+  const side = key.startsWith('seller_') ? 'seller' : key.startsWith('buyer_') ? 'buyer' : null;
+  const m = side && match ? match[side] : null;
+  if (!m) return '';
+  const of = esc(m.matched_name || '');
+
+  if (key === `${side}_name_th`) {
+    return m.matched
+      ? `<span class="db-badge match" title="ตรงกับคู่ค้าในฐานข้อมูล: ${of}">✓ ฐานข้อมูล ${m.name_match_pct}%</span>`
+      : '<span class="db-badge newone" title="ยังไม่เคยมีคู่ค้ารายนี้ในฐานข้อมูล — กดบันทึกแล้วระบบจะจำไว้ให้">คู่ค้าใหม่</span>';
+  }
+  const st = key === `${side}_tax_id` ? m.tax_id_match
+           : key === `${side}_address` ? m.address_match : null;
+  if (st === 'match')    return `<span class="db-badge match" title="ตรงกับที่บันทึกไว้ของ ${of}">✓ ตรงฐานข้อมูล</span>`;
+  if (st === 'mismatch') return `<span class="db-badge mismatch" title="ต่างจากที่บันทึกไว้ของ ${of} — อาจเป็นข้อมูลใหม่ที่ถูกต้องกว่า หรือโมเดลอ่านผิด">⚠ ไม่ตรงฐานข้อมูล</span>`;
+  return '';
+}
+
+function buildRow(fld, value, fix, match) {
   const row = document.createElement('div');
   row.className = 'row';
+  // ถ้าช่องนี้ถูกตารางอ้างอิงเติมให้อยู่แล้ว ไม่ต้องขึ้นป้าย "ตรงฐานข้อมูล" ซ้ำอีก
   const badge = fix
     ? `<span class="src-badge" title="เติมจากตารางอ้างอิง (${esc(fix.reason || '')}${fix.old ? ', เดิม: ' + esc(fix.old) : ''})">ตารางอ้างอิง</span>`
-    : '';
+    : dbBadge(fld.key, match);
   row.innerHTML = `
     <span class="label">${esc(fld.label)}</span>
     <span class="field"><input data-key="${esc(fld.key)}" value="${esc(value)}">${badge}</span>`;

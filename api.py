@@ -440,13 +440,44 @@ def save_invoice(payload: dict = Body(...)):
     """
     บันทึกใบที่ผู้ใช้ตรวจ/แก้แล้วลงฐานข้อมูล (กดปุ่ม "บันทึก" ในหน้าตรวจ)
     payload: {"filename":..., "fields": {...}, "items": [...], "flags": [...]}
+
+    บันทึก 2 อย่างในการกดครั้งเดียว:
+      1. ตัวใบ -> store (data/invoices.db)  เอาไปสรุปยอดรายเดือน/รายปี
+      2. ข้อมูลคู่ค้า -> master_db ผ่าน save_verified()  ให้ตารางอ้างอิงโตขึ้น
+    เพราะ "พนักงานยืนยันว่าใบนี้ถูกต้องแล้ว" ก็แปลว่าชื่อ/เลขภาษี/ที่อยู่คู่ค้า
+    ในใบนั้นถูกต้องด้วย -- ไม่ต้องให้ frontend จำว่าต้องยิงสอง endpoint
+    (ยังมี POST /confirm แยกไว้เหมือนเดิม สำหรับกรณีอยากยืนยันคู่ค้าอย่างเดียว)
     """
-    if not isinstance(payload.get("fields"), dict):
+    fields = payload.get("fields")
+    if not isinstance(fields, dict):
         raise HTTPException(400, detail="payload ต้องมี fields")
+
     try:
-        return store.save_invoice(payload)
+        result = store.save_invoice(payload)
     except Exception as e:
         raise HTTPException(500, detail=f"บันทึกไม่สำเร็จ: {e}")
+
+    # ตารางคู่ค้าเป็นงานเสริม -- ถ้าพลาดต้องไม่ทำให้ "บันทึกใบ" ที่สำเร็จไปแล้วกลายเป็น error
+    learned = []
+    try:
+        for side in ("seller", "buyer"):
+            name_th = str(fields.get(f"{side}_name_th") or "").strip()
+            if not name_th:
+                continue
+            save_verified(side, name_th,
+                          str(fields.get(f"{side}_name_en") or ""),
+                          str(fields.get(f"{side}_tax_id") or ""),
+                          str(fields.get(f"{side}_address") or ""))
+            learned.append(side)
+        if learned and STATE["loaded"]:
+            # รีเฟรชตารางในหน่วยความจำ -- ใบถัดไปได้ประโยชน์ทันที ไม่ต้อง restart
+            STATE["master_seller"] = build_master_live("seller")
+            STATE["master_buyer"] = build_master_live("buyer")
+    except Exception as e:
+        print(f"เตือน: บันทึกใบสำเร็จแล้ว แต่จำข้อมูลคู่ค้าไม่สำเร็จ: {e}", flush=True)
+        return {**result, "learned": [], "learn_error": str(e)}
+
+    return {**result, "learned": learned}
 
 
 @app.get("/api/summary")
