@@ -33,7 +33,11 @@
     font-family: "Leelawadee UI", "Noto Sans Thai", "IBM Plex Sans Thai", "Segoe UI", system-ui, sans-serif;
     font-size: 15px; line-height: 1.5; -webkit-tap-highlight-color: transparent;
   }
-  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px 150px; }
+  /* padding ล่างอิงความสูงจริงของ .bottombar (วัดด้วย ResizeObserver ใน JS) แทนเลข
+     คงที่ -- แถบล่างมีจำนวนแถวไม่เท่ากันเสมอ (มี/ไม่มีข้อความ "ต้องตรวจ N", ปุ่ม
+     CSV/JSON) เลขคงที่เดิม (150px) เตี้ยกว่าแถบจริงเวลามีเนื้อหาครบ ทำให้การ์ด
+     ใบสุดท้ายในลิสต์โดนแถบทับบางส่วน -- 150px คือ fallback ตอนยังวัดไม่ได้/ไม่โชว์แถบ */
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px calc(var(--bottombar-h, 150px) + 20px); }
 
   .page-head { padding: 22px 0 16px; display: flex; align-items: flex-start; gap: 12px; }
   .page-head a.btn { flex: 0 0 auto; text-decoration: none; }
@@ -332,7 +336,10 @@
       <h1 id="pageTitle">รายการใบกำกับภาษี</h1>
       <p id="pageSub">สกัดข้อมูลและตรวจสอบอัตโนมัติ</p>
     </div>
-    <a class="btn btn-sm" href="/summary">สรุปยอด →</a>
+    <!-- เปิดแท็บใหม่ (ไม่ใช่ navigate ทับ) -- /summary เป็นคนละหน้า HTML แยกกัน
+         การ navigate ทับจะล้าง state ของรายการที่สกัดแล้วแต่ยังไม่ได้บันทึก
+         (อยู่ใน JS memory ล้วนๆ) ทิ้งทั้งหมด กด "กลับ" มาก็เจอหน้าเปล่า -->
+    <a class="btn btn-sm" href="/summary" target="_blank" rel="noopener">สรุปยอด →</a>
   </div>
 
   <div class="done-banner" id="doneBanner">สกัดข้อมูลครบทุกรายการแล้ว ✓</div>
@@ -509,6 +516,13 @@ let doneThisRun = 0, totalThisRun = 0;
 const $ = id => document.getElementById(id);
 const rowsEl = $('rows'), progressCard = $('progressCard'), doneBanner = $('doneBanner');
 const bottomBar = $('bottomBar'), emptyCta = $('emptyCta');
+
+// วัดความสูงจริงของแถบล่าง (fixed) แล้วอัปเดต --bottombar-h ให้ .wrap เว้น padding
+// พอดีเสมอ -- แถบนี้สูงไม่เท่ากันตามเนื้อหา (ข้อความ "ต้องตรวจ N", ปุ่ม CSV/JSON)
+// ResizeObserver จับได้ทั้งตอน show/hide (เปลี่ยน display) และตอนเนื้อหาข้างในเปลี่ยน
+new ResizeObserver(() => {
+  document.documentElement.style.setProperty('--bottombar-h', bottomBar.offsetHeight + 'px');
+}).observe(bottomBar);
 const sheetBack = $('sheetBack'), dropEl = $('drop');
 const fileInput = $('fileInput');
 const detailEl = $('detail'), detailImg = $('detailImg'), detailImgBox = $('detailImgBox');
