@@ -34,7 +34,7 @@ from contextlib import asynccontextmanager
 import torch
 from PIL import Image, ImageOps
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Body
+from fastapi import FastAPI, File, UploadFile, HTTPException, Body, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.concurrency import run_in_threadpool
@@ -84,6 +84,11 @@ MAX_IMAGE_SIDE  = 1600
 MAX_UPLOAD_MB   = 15
 APPLY_PREPROCESS = os.environ.get("APPLY_PREPROCESS", "0") == "1"
 STATIC_DIR      = Path(__file__).parent / "static"
+# API key -- ไม่บังคับตอนอยู่ใน LAN (ค่าเริ่มต้น ไม่ตั้ง env var ก็ไม่ต้องใส่ key
+# เลย พฤติกรรมเดิมทุกอย่าง) แต่ต้องตั้งก่อนเปิดออกนอก LAN เสมอ ไม่งั้นใครก็เรียก
+# /ocr (ใช้ GPU ฟรี), /invoices, /confirm (ยัดข้อมูลปลอมเข้าฐานข้อมูล) ได้หมด
+# รันแบบมี auth:  API_KEY=xxxxx python api.py
+API_KEY         = os.environ.get("API_KEY") or None
 # ─────────────────────────────────────────────────────────
 
 # global model state
@@ -189,6 +194,16 @@ app.add_middleware(
 )
 
 
+def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    """ป้องกัน endpoint ที่ใช้ GPU หรือแตะฐานข้อมูลจริง -- เช็คเฉพาะตอนตั้ง API_KEY
+    ไว้ (เช่นตอนเปิดออกนอก LAN) ถ้าไม่ได้ตั้ง (ค่าเริ่มต้นตอนใช้ใน LAN) ผ่านตลอด
+    ไม่ต้องมี key เลย ไม่กระทบพฤติกรรมเดิมแม้แต่นิดเดียว
+    ไม่ครอบ /health, /meta, /, /summary เพราะไม่ใช่ข้อมูลอ่อนไหว (แค่ label
+    ฟิลด์/หน้า HTML เปล่า) และ /health ควรเช็คได้เสมอไม่ว่าจะมี key หรือไม่"""
+    if API_KEY and x_api_key != API_KEY:
+        raise HTTPException(401, detail="ต้องใส่ API key ที่ถูกต้อง (header X-API-Key)")
+
+
 def _cap_image_size(img: Image.Image, max_side: int = MAX_IMAGE_SIDE) -> Image.Image:
     """ย่อรูปให้ด้านยาวสุดไม่เกิน max_side (คงสัดส่วนเดิม) -- ป้องกัน VRAM ล้น
     จากรูปความละเอียดสูงมาก (กล้องมือถือ 12MP+) ก่อนเข้า image processor ของโมเดล
@@ -260,7 +275,7 @@ def health():
     }
 
 
-@app.post("/ocr")
+@app.post("/ocr", dependencies=[Depends(require_api_key)])
 async def ocr(file: UploadFile = File(...)):
     if not STATE["loaded"]:
         raise HTTPException(503, detail=f"โมเดลยังไม่พร้อม: {STATE['error'] or 'กำลังโหลด'}")
@@ -371,7 +386,7 @@ class ConfirmRequest(BaseModel):
     buyer_address: str = ""
 
 
-@app.post("/confirm")
+@app.post("/confirm", dependencies=[Depends(require_api_key)])
 def confirm(body: ConfirmRequest):
     """บันทึกข้อมูลคู่ค้า (ชื่อ/ที่อยู่/เลขภาษี เท่านั้น) ที่ผู้ใช้ตรวจ/แก้ไขแล้วลง
     master_db ถาวร -- ใช้ได้ทั้งบริษัทใหม่ (เพิ่มรายการ) และบริษัทเก่า (แก้ให้ตรงปัจจุบัน)
@@ -435,7 +450,7 @@ def _page(name: str):
 # ฐานข้อมูล: บันทึกใบที่ตรวจแล้ว + สรุปยอด
 # ══════════════════════════════════════════════
 
-@app.post("/invoices")
+@app.post("/invoices", dependencies=[Depends(require_api_key)])
 def save_invoice(payload: dict = Body(...)):
     """
     บันทึกใบที่ผู้ใช้ตรวจ/แก้แล้วลงฐานข้อมูล (กดปุ่ม "บันทึก" ในหน้าตรวจ)
@@ -480,13 +495,13 @@ def save_invoice(payload: dict = Body(...)):
     return {**result, "learned": learned}
 
 
-@app.get("/api/summary")
+@app.get("/api/summary", dependencies=[Depends(require_api_key)])
 def api_summary():
     """ยอดรวมรายเดือน + รายปี สำหรับหน้ากราฟ"""
     return store.summary()
 
 
-@app.get("/api/invoices")
+@app.get("/api/invoices", dependencies=[Depends(require_api_key)])
 def api_invoices(limit: int = 500):
     """รายการใบที่บันทึกไว้ (ล่าสุดก่อน)"""
     return {"invoices": store.list_invoices(limit)}
@@ -507,5 +522,11 @@ if __name__ == "__main__":
     print("\nเปิด API แล้ว:", flush=True)
     print(f"  ในเครื่องนี้      : http://localhost:8000", flush=True)
     print(f"  จากมือถือ (WiFi วงเดียวกัน) : http://{lan_ip}:8000", flush=True)
-    print(f"  Swagger (ทดสอบ)  : http://localhost:8000/docs\n", flush=True)
+    print(f"  Swagger (ทดสอบ)  : http://localhost:8000/docs", flush=True)
+    if API_KEY:
+        print(f"  API key          : เปิดใช้งาน (ต้องแนบ header X-API-Key ทุกครั้งที่เรียก "
+             f"/ocr, /confirm, /invoices, /api/summary, /api/invoices)\n", flush=True)
+    else:
+        print(f"  API key          : ไม่ได้ตั้งไว้ -- ใครก็เรียกได้ ใช้ได้เฉพาะใน LAN "
+             f"เท่านั้น! ตั้ง API_KEY=xxxxx ก่อน python api.py หากจะเปิดออกนอก LAN\n", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=8000)
