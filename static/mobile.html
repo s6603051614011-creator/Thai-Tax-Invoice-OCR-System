@@ -2,176 +2,849 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>OCR ใบกำกับภาษี</title>
+<!-- ไม่ล็อก maximum-scale เพราะผู้ใช้ต้องซูมดูรูปใบกำกับตอนตรวจทานตัวเลขเล็กๆ -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>รายการใบกำกับภาษี</title>
 <style>
+  /* ขาว + น้ำเงิน ตามแบบ: พื้นหลังเป็นขาวล้วน ไม่ใช่เทา -- การ์ดแยกตัวออกมาด้วย
+     เส้นขอบบางๆ กับเงาอ่อน ไม่ใช่ด้วยการทำพื้นหลังให้เข้มกว่า
+     เทาอ่อน (--surface-3) ใช้เฉพาะที่รองรูป/แถบความคืบหน้าเท่านั้น */
   :root {
-    --bg: #f4f6f5; --surface: #fff; --text: #16211f; --muted: #5b6b68;
-    --border: #dbe3e1; --accent: #0e7c86; --accent-soft: #e4f2f1;
-    --good: #1d8a4a; --bad: #b3261e; --warn: #a15c00; --warn-bg: #fff3cd;
+    --bg: #ffffff; --surface: #ffffff; --surface-2: #f8fafc; --surface-3: #f1f4f8;
+    --text: #10131a; --text-2: #3c4453; --muted: #6b7280;
+    --border: #e8ebf0; --input-bg: #ffffff; --input-border: #ccd1db;
+    --blue: #0b5fff; --blue-hover: #0a4fd6; --blue-soft: #e9f0ff; --on-blue: #ffffff;
+    --green: #12a35f; --green-soft: #e6f7ef;
+    --amber: #b45309; --amber-soft: #fef3c7; --amber-line: #f59e0b;
+    --red: #e5352b; --red-soft: #fdecea;
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+    --shadow-md: 0 4px 14px rgba(16,24,40,.08);
+    --shadow-up: 0 -3px 16px rgba(16,24,40,.08);
+    --r: 14px; --r-sm: 11px;
   }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#0d1413; --surface:#131c1b; --text:#e7f0ee; --muted:#93a19e;
-      --border:#223330; --accent:#4dd4c4; --accent-soft:#163330;
-      --good:#4ade80; --bad:#f87171; --warn:#facc15; --warn-bg:#3a2f0a; }
-  }
+  /* ไม่มีโหมดมืด -- แบบที่ออกไว้เป็นพื้นขาวอย่างเดียว ถ้าปล่อยให้สลับตามธีมของเครื่อง
+     ผู้ใช้ที่ตั้งเครื่องเป็นธีมมืดจะเห็นหน้าเว็บเป็นสีเข้ม ไม่ตรงแบบ
+     color-scheme: light บอกเบราว์เซอร์ไม่ให้แต้มสีเข้มให้ scrollbar/ช่องกรอกเองด้วย */
+  :root { color-scheme: light; }
+
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font-family: "Leelawadee UI", "Noto Sans Thai", "Segoe UI", system-ui, sans-serif;
-    padding: 16px; padding-bottom: 60px;
+    font-family: "Leelawadee UI", "Noto Sans Thai", "IBM Plex Sans Thai", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.5; -webkit-tap-highlight-color: transparent;
   }
-  h1 { font-size: 1.25rem; margin: 0 0 4px; }
-  .sub { color: var(--muted); font-size: 0.85rem; margin: 0 0 18px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px 150px; }
 
-  .picker {
-    background: var(--surface); border: 2px dashed var(--border); border-radius: 12px;
-    padding: 24px 16px; text-align: center; margin-bottom: 14px;
-  }
-  .picker input[type=file] { display: none; }
-  .picker label {
-    display: inline-block; background: var(--accent); color: #fff; font-weight: 600;
-    padding: 12px 24px; border-radius: 999px; cursor: pointer; font-size: 1rem;
-  }
-  .picker .count { margin-top: 10px; color: var(--muted); font-size: 0.9rem; }
+  .page-head { padding: 22px 0 16px; display: flex; align-items: flex-start; gap: 12px; }
+  .page-head a.btn { flex: 0 0 auto; text-decoration: none; }
+  .page-head h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 3px; letter-spacing: -.02em; }
+  .page-head p { margin: 0; color: var(--muted); font-size: 0.86rem; }
 
-  button#uploadBtn {
-    width: 100%; padding: 14px; font-size: 1.05rem; font-weight: 700;
-    background: var(--accent); color: #fff; border: none; border-radius: 10px;
-    margin-bottom: 20px; cursor: pointer;
+  .done-banner {
+    display: none; background: var(--green-soft); color: var(--green);
+    border-radius: var(--r-sm); padding: 11px 14px; margin-bottom: 16px;
+    font-size: 0.88rem; font-weight: 600; text-align: center;
   }
-  button#uploadBtn:disabled { opacity: 0.5; }
+  .done-banner.show { display: block; }
 
-  .progress-wrap {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 14px 16px; margin-bottom: 20px; display: none;
+  .progress-card {
+    display: none; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r); box-shadow: var(--shadow); padding: 15px 16px; margin-bottom: 14px;
   }
-  .progress-bar { height: 8px; background: var(--border); border-radius: 999px; overflow: hidden; margin-top: 8px; }
-  .progress-bar > div { height: 100%; background: var(--accent); width: 0%; transition: width .3s; }
-  .progress-text { font-size: 0.9rem; color: var(--muted); }
-  .progress-eta { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+  .progress-card.show { display: block; }
+  .progress-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .progress-top .lbl { font-size: 0.95rem; font-weight: 700; }
+  .progress-top .pct { font-size: 0.95rem; font-weight: 700; color: var(--blue); }
+  .progress-card.complete .pct { color: var(--green); }
+  .progress-bar { height: 7px; background: var(--surface-3); border-radius: 999px; overflow: hidden; margin-top: 10px; }
+  .progress-bar > div { height: 100%; width: 0%; background: var(--blue); border-radius: 999px; transition: width .3s; }
+  .progress-card.complete .progress-bar > div { background: var(--green); }
+  .progress-eta { font-size: 0.78rem; color: var(--muted); margin-top: 8px; }
 
-  .card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-    margin-bottom: 14px; overflow: hidden;
+  /* ── ลิสต์รายการ ── */
+  .rows { display: flex; flex-direction: column; gap: 10px; }
+  .row-item {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 11px 13px; box-shadow: var(--shadow); font-family: inherit; color: inherit;
+    cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .12s;
   }
-  .card-head {
-    padding: 10px 14px; background: var(--accent-soft); display: flex;
-    justify-content: space-between; align-items: center; font-weight: 600; font-size: 0.9rem;
+  .row-item:hover:not(.queued):not(.active) { border-color: var(--blue); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .row-item:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .row-item.queued, .row-item.active { cursor: default; }
+  .row-item.active { border-color: var(--blue); border-width: 1.5px; box-shadow: 0 0 0 3px var(--blue-soft); }
+  .row-item.err { border-color: var(--red); }
+
+  /* ไอคอนสถานะแบนๆ ตามแบบ: สี่เหลี่ยมมนสีอ่อน + วงกลมทึบข้างใน
+     (ไม่ใช้รูปถ่ายใบจริง เพราะรูปสีเข้มทำให้ทั้งหน้าดูทึบ ผิดจากแบบที่ขาวสะอาด) */
+  .row-ic {
+    flex: 0 0 auto; width: 40px; height: 40px; border-radius: 10px;
+    background: var(--surface-3); color: var(--muted); display: grid; place-items: center; font-size: 1rem;
   }
-  .card-head .time { color: var(--muted); font-weight: 400; font-size: 0.8rem; }
-  .card-body { padding: 4px 14px 12px; }
-  .flag-banner {
-    background: var(--warn-bg); color: var(--warn); font-size: 0.82rem;
-    padding: 8px 12px; margin: 8px 0; border-radius: 8px;
+  .row-ic .tick {
+    width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+    color: #fff; font-size: 0.7rem; font-weight: 700; line-height: 1;
   }
-  .flag-banner div { margin: 2px 0; }
-  .row { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); align-items: baseline; }
-  .row:last-child { border-bottom: none; }
-  .row .label { flex: 0 0 118px; font-size: 0.78rem; color: var(--muted); }
-  .row input {
-    flex: 1; font-size: 0.9rem; border: 1px solid transparent; background: transparent;
-    color: var(--text); font-family: inherit; padding: 2px 4px; border-radius: 4px; min-width: 0;
-  }
-  .row input:focus { border-color: var(--accent); background: var(--surface); outline: none; }
-  .items-title { font-size: 0.8rem; color: var(--accent); font-weight: 700; margin: 10px 0 4px; }
-  table.items { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-  table.items th, table.items td { padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: left; }
-  table.items th { color: var(--muted); font-weight: 600; font-size: 0.72rem; }
-  table.items input {
-    width: 100%; font-size: 0.82rem; border: 1px solid transparent; background: transparent;
-    color: var(--text); font-family: inherit; padding: 2px 4px; border-radius: 4px; min-width: 60px;
-  }
-  table.items input:focus { border-color: var(--accent); background: var(--surface); outline: none; }
-  .card.error .card-head { background: #fde2e1; color: var(--bad); }
-  .spinner {
-    display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
-    border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite;
-    vertical-align: middle; margin-right: 6px;
-  }
+  .row-item.ok   .row-ic { background: var(--green-soft); }
+  .row-item.ok   .row-ic .tick { background: var(--green); }
+  .row-item.todo .row-ic { background: var(--amber-soft); }
+  .row-item.todo .row-ic .tick { background: var(--amber-line); }
+  .row-item.active .row-ic { background: var(--blue-soft); }
+  .row-item.err .row-ic { background: var(--red-soft); color: var(--red); }
+
+  .row-body { flex: 1; min-width: 0; }
+  /* display:block จำเป็น -- เป็น <span> จะไหลต่อกันบรรทัดเดียว ผิดจากดีไซน์ที่แยกสองบรรทัด */
+  .row-name { display: block; font-size: 0.93rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-sub { display: block; font-size: 0.79rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-item.ok   .row-sub { color: var(--green); }
+  .row-item.todo .row-sub { color: var(--amber); }
+  .row-item.err  .row-sub { color: var(--red); }
+  .row-chev { flex: 0 0 auto; color: var(--muted); font-size: 1.1rem; }
+  .row-item.queued .row-chev, .row-item.active .row-chev { display: none; }
+  .row-mini { display: block; height: 4px; background: var(--surface-3); border-radius: 999px; overflow: hidden; margin-top: 6px; }
+  .row-mini > div { height: 100%; width: 45%; background: var(--blue); border-radius: 999px; animation: crawl 1.6s ease-in-out infinite; }
+  @keyframes crawl { 0% { margin-left: -45%; } 100% { margin-left: 100%; } }
+  .row-edit { flex: 0 0 auto; font-size: 0.66rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--green-soft); color: var(--green); }
+  .row-edit.unsaved { background: var(--amber-soft); color: var(--amber); }
+
+  .spinner { width: 17px; height: 17px; border: 2px solid var(--blue-soft); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── ปุ่ม ── */
+  .btn {
+    font-family: inherit; font-size: 0.93rem; font-weight: 600; cursor: pointer;
+    border-radius: var(--r-sm); padding: 12px 18px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-2); transition: background .12s, border-color .12s, color .12s;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn-primary { background: var(--blue); color: var(--on-blue); border-color: var(--blue); }
+  .btn-primary:hover:not(:disabled) { background: var(--blue-hover); border-color: var(--blue-hover); color: var(--on-blue); }
+  .btn-block { width: 100%; }
+  .btn-sm { padding: 7px 13px; font-size: 0.8rem; font-weight: 500; }
+  .btn-ghost { background: var(--surface-3); border-color: transparent; }
+  .btn-danger { background: transparent; border-color: transparent; color: var(--red); font-weight: 600; }
+
+  /* ── แถบล่างสุด ── */
+  .bottombar {
+    position: fixed; left: 0; right: 0; bottom: 0; display: none; z-index: 60;
+    background: var(--surface); border-top: 1px solid var(--border); box-shadow: var(--shadow-up);
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  .bottombar.show { display: block; }
+  .bottombar-inner { max-width: 720px; margin: 0 auto; }
+  .total-line { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .total-line .cap { font-size: 0.74rem; color: var(--muted); }
+  .total-line .amt { font-size: 1.32rem; font-weight: 700; letter-spacing: -.02em; }
+  .total-line .n { font-size: 0.78rem; color: var(--muted); }
+  /* งานรอง 2 ปุ่มเป็นปุ่มกรอบชัดเจน (ไม่ใช่ลิงก์ตัวหนังสือ ซึ่งจางจนมองไม่ออกว่ากดได้)
+     แล้วปุ่มหลักน้ำเงินเต็มความกว้างอยู่แถวล่างตามแบบ */
+  .bottombar .acts { display: flex; gap: 9px; margin-bottom: 9px; }
+  .bottombar .acts .btn { flex: 1; }
+
+  /* ── แผ่นเลื่อนขึ้น ── */
+  .sheet-back { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 150; display: none; align-items: flex-end; justify-content: center; }
+  .sheet-back.show { display: flex; }
+  .sheet {
+    background: var(--surface); width: 100%; max-width: 560px;
+    border-radius: 20px 20px 0 0; padding: 10px 18px calc(20px + env(safe-area-inset-bottom));
+    max-height: 92vh; overflow-y: auto;
+  }
+  .sheet .grip { width: 44px; height: 4px; background: var(--surface-3); border-radius: 999px; margin: 0 auto 16px; }
+  .sheet h2 { font-size: 1.18rem; font-weight: 700; margin: 0 0 15px; }
+  .opt {
+    display: flex; align-items: center; gap: 13px; width: 100%; text-align: left;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 14px; margin-bottom: 11px; cursor: pointer; font-family: inherit; color: inherit;
+  }
+  .opt:hover { border-color: var(--blue); background: var(--surface-2); }
+  .opt-ic { flex: 0 0 auto; width: 42px; height: 42px; border-radius: var(--r-sm); background: var(--blue-soft); color: var(--blue); display: grid; place-items: center; }
+  .opt-ic svg { width: 21px; height: 21px; }
+  .opt .t { font-size: 0.95rem; font-weight: 700; }
+  .opt .s { font-size: 0.78rem; color: var(--muted); }
+  .drop {
+    border: 1.5px dashed var(--blue); border-radius: var(--r); background: var(--blue-soft);
+    padding: 22px 14px; text-align: center; color: var(--blue); font-weight: 600;
+    font-size: 0.9rem; margin-bottom: 11px; transition: background .15s;
+  }
+  .drop.over { background: var(--blue); color: var(--on-blue); }
+  .drop svg { width: 22px; height: 22px; display: block; margin: 0 auto 7px; }
+  input[type=file] { display: none; }
+
+  /* ── กล่องยืนยัน ── */
+  .modal-back {
+    position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 260;
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-back.show { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: var(--r); padding: 20px;
+    width: 100%; max-width: 380px; box-shadow: var(--shadow-md);
+  }
+  .modal .m-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 7px; }
+  .modal .m-body { font-size: 0.88rem; color: var(--text-2); margin-bottom: 18px; }
+  .modal .m-body .warn { color: var(--amber); }
+  .modal .m-acts { display: flex; gap: 9px; }
+  .modal .m-acts .btn { flex: 1; }
+
+  .empty-cta { text-align: center; padding: 26px 16px; }
+  .empty-cta p { color: var(--muted); font-size: 0.86rem; margin: 0 0 14px; }
+
+  /* ══ หน้ากล้อง ══ */
+  .camera { position: fixed; inset: 0; z-index: 180; background: #000; display: none; grid-template-rows: auto minmax(0,1fr) auto; }
+  .camera.show { display: grid; }
+  .cam-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px calc(6px + env(safe-area-inset-top)); }
+  .cam-btn {
+    width: 38px; height: 38px; border-radius: 50%; border: none; cursor: pointer;
+    background: rgba(255,255,255,.16); color: #fff; display: grid; place-items: center; font-size: 1.05rem;
+  }
+  .seg { display: flex; background: rgba(255,255,255,.14); border-radius: 999px; padding: 3px; }
+  .seg button {
+    border: none; background: transparent; color: rgba(255,255,255,.75); cursor: pointer;
+    font-family: inherit; font-size: 0.8rem; font-weight: 600; padding: 6px 14px; border-radius: 999px;
+  }
+  .seg button.on { background: var(--blue); color: #fff; }
+  .cam-stage { position: relative; overflow: hidden; display: grid; place-items: center; }
+  .cam-stage video { width: 100%; height: 100%; object-fit: cover; }
+  .cam-frame { position: absolute; inset: 12% 8%; border: 2px dashed var(--blue); border-radius: 10px; pointer-events: none; }
+  .cam-msg { color: #fff; text-align: center; padding: 26px; font-size: 0.9rem; line-height: 1.7; }
+  .cam-msg .btn { margin-top: 14px; }
+  .cam-bottom { padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); }
+  .shots { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; min-height: 46px; }
+  .shots img { width: 42px; height: 42px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,.3); }
+  .shots .more { width: 42px; height: 42px; border-radius: 8px; background: rgba(255,255,255,.2); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 0.85rem; }
+  .shots .cnt { color: #fff; font-size: 0.82rem; margin-left: 4px; }
+  .cam-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .shutter { width: 68px; height: 68px; border-radius: 50%; background: #fff; border: 4px solid rgba(255,255,255,.45); cursor: pointer; }
+  .shutter:disabled { opacity: .4; cursor: default; }
+  .cam-go { background: var(--blue); color: #fff; border: none; border-radius: 999px; padding: 12px 20px; font-family: inherit; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
+  .cam-go:disabled { opacity: .4; cursor: default; }
+
+  /* ══ หน้าเลือกไฟล์ (ติ๊กถูกได้หลายไฟล์) ══ */
+  .picker { position: fixed; inset: 0; z-index: 170; background: var(--bg); display: none; grid-template-rows: auto minmax(0,1fr) auto; }
+  .picker.show { display: grid; }
+  .pk-top {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .pk-top .t { flex: 1; text-align: center; font-weight: 700; font-size: 1rem; }
+  .pk-top button { background: none; border: none; font-family: inherit; cursor: pointer; font-size: 0.9rem; color: var(--blue); font-weight: 600; padding: 4px; }
+  .pk-grid { overflow-y: auto; padding: 16px; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); align-content: start; }
+  .pk-cell { cursor: pointer; }
+  .pk-thumb { position: relative; aspect-ratio: 3/4; border-radius: var(--r); overflow: hidden; background: var(--surface-3); border: 1px solid var(--border); }
+  .pk-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pk-check {
+    position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(255,255,255,.9); border: 1.5px solid #d0d5dd; display: grid; place-items: center;
+    color: transparent; font-size: 0.75rem; font-weight: 700;
+  }
+  .pk-cell.on .pk-check { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .pk-cell.on .pk-thumb { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue); }
+  .pk-name { font-size: 0.75rem; color: var(--muted); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pk-bottom { background: var(--surface); border-top: 1px solid var(--border); padding: 12px 16px calc(14px + env(safe-area-inset-bottom)); }
+  .pk-bottom .cnt { font-size: 0.85rem; color: var(--muted); margin-bottom: 10px; }
+
+  /* ══ หน้ารายละเอียด ══ */
+  .detail { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: none; }
+  /* คอลัมน์ต้องเป็น minmax(0,1fr) -- ถ้าปล่อย auto คอลัมน์จะกว้างตาม max-content ของ
+     หัวข้อ (ปุ่มเรียงยาว) แล้วลากฟอร์มให้ล้นจอตามไปด้วยบนมือถือ */
+  .detail.show { display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); }
+  .detail-head { display: flex; align-items: center; gap: 8px; padding: 9px 14px; flex-wrap: wrap; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .detail-head > .who { min-width: 0; }
+  .detail-head .title { font-weight: 700; font-size: 1rem; white-space: nowrap; }
+  .detail-head .meta { color: var(--muted); font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .detail-head .spacer { flex: 1; }
+  .detail-head .divider { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
+
+  .detail-body {
+    /* จอยิ่งกว้าง ให้ฟอร์มกว้างขึ้นด้วย -- ตารางสินค้าจะได้ไม่ต้องเลื่อนแนวนอน
+       grid-template-rows: minmax(0,1fr) จำเป็น -- ถ้าปล่อย auto แถวจะสูงตามเนื้อหา
+       ทำให้ max-height:100% ของรูปไม่มีความสูงอ้างอิง รูปเลยแสดงขนาดจริงแล้วล้นกรอบ */
+    display: grid; grid-template-columns: minmax(0, 1fr) clamp(420px, 36%, 640px);
+    grid-template-rows: minmax(0, 1fr); overflow: hidden;
+  }
+  @media (max-width: 900px) { .detail-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 44vh minmax(0, 1fr); } }
+
+  .detail-img { position: relative; overflow: auto; background: var(--surface-3); display: flex; min-height: 0; }
+  /* จัดกึ่งกลางด้วย margin:auto ไม่ใช่ align-items/justify-content:center --
+     ถ้าใช้ center แล้วรูปใหญ่กว่ากรอบ (ตอนซูม) ส่วนที่ล้นด้าน "บน/ซ้าย" จะเลื่อนไป
+     หาไม่ได้เลย (วัดจริง: บนหายไป 486px) ส่วน auto margin จะยุบเป็น 0 เมื่อพื้นที่
+     ไม่พอ รูปเลยชิดมุมเริ่มต้นและเลื่อนดูได้ครบทุกด้าน */
+  .detail-img img { margin: auto; max-width: 100%; max-height: 100%; object-fit: contain; display: block; cursor: zoom-in; }
+  .detail-img.zoom img { max-width: none; max-height: none; width: 190%; cursor: zoom-out; }
+  .imgtools { position: absolute; top: 10px; right: 10px; display: flex; gap: 7px; z-index: 2; }
+  /* ใช้สัญลักษณ์แทนคำ -- ปุ่มกลมขนาดนิ้วแตะได้สบายบนมือถือ (40px) */
+  .imgtools button {
+    width: 40px; height: 40px; border-radius: 50%; padding: 0; cursor: pointer; border: none;
+    background: rgba(15,23,42,.78); color: #fff; display: grid; place-items: center;
+  }
+  .imgtools button:hover { background: rgba(15,23,42,.95); }
+  .imgtools svg { width: 19px; height: 19px; }
+
+  .detail-form { overflow-y: auto; padding: 14px 18px 44px; border-left: 1px solid var(--border); background: var(--surface); }
+  @media (max-width: 900px) { .detail-form { border-left: none; border-top: 1px solid var(--border); } }
+  .edit-hint { font-size: 0.78rem; color: var(--text-2); background: var(--blue-soft); border-radius: var(--r-sm); padding: 9px 12px; margin-bottom: 12px; }
+
+  .group-title { font-size: 0.73rem; font-weight: 700; color: var(--muted); margin: 16px 0 7px; letter-spacing: .04em; }
+  .group-title:first-child { margin-top: 0; }
+  .row { display: flex; gap: 10px; padding: 3px 0; align-items: center; }
+  .row .label { flex: 0 0 106px; font-size: 0.78rem; color: var(--muted); }
+  .row .field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+  /* กรอบ+พื้นหลังตลอดเวลา = ผู้ใช้เห็นทันทีว่าช่องนี้พิมพ์แก้ได้ */
+  .row input, table.items input {
+    font-size: 0.88rem; font-family: inherit; color: var(--text);
+    background: var(--input-bg); border: 1px solid var(--input-border);
+    border-radius: 9px; padding: 8px 10px; min-width: 0; transition: border-color .12s, box-shadow .12s;
+  }
+  .row input { flex: 1; }
+  .row input:hover, table.items input:hover { border-color: var(--blue); }
+  .row input:focus, table.items input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+  input.bad { background: var(--red-soft); border-color: var(--red); }
+  input.bad:focus { box-shadow: 0 0 0 3px rgba(229,53,43,.15); }
+  .src-badge { flex: 0 0 auto; font-size: 0.65rem; padding: 2px 8px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); cursor: help; white-space: nowrap; font-weight: 600; }
+
+  .items-title { font-size: 0.73rem; color: var(--muted); font-weight: 700; margin: 16px 0 7px; letter-spacing: .04em; }
+  .items-scroll { overflow-x: auto; }
+  table.items { width: 100%; border-collapse: separate; border-spacing: 0 5px; font-size: 0.82rem; }
+  table.items th { color: var(--muted); font-weight: 600; font-size: 0.71rem; white-space: nowrap; padding: 0 4px 2px; text-align: left; }
+  table.items td { padding: 0 3px; }
+  table.items input { width: 100%; font-size: 0.8rem; padding: 6px 8px; min-width: 74px; }
+  /* ชื่อสินค้ายาวกว่าคอลัมน์อื่นมาก ถ้าแบ่งเท่ากันจะโดนบีบจนอ่านไม่ออก */
+  table.items input[data-key="description"] { min-width: 190px; }
+
+  .check-banner { font-size: 0.81rem; padding: 10px 12px; margin-bottom: 12px; border-radius: var(--r-sm); background: var(--amber-soft); color: var(--amber); }
+  .check-banner.ok { background: var(--green-soft); color: var(--green); }
+  .check-banner div { margin: 3px 0; }
+  .ml-note { font-size: 0.74rem; color: var(--muted); margin-top: 12px; }
 </style>
 </head>
 <body>
 
-<h1>OCR ใบกำกับภาษีไทย</h1>
-<p class="sub">เลือกรูปที่ถ่ายไว้ได้เรื่อยๆ (กดเลือกซ้ำเพื่อเพิ่มเข้าคิว ไม่ต้องเลือกรวมทีเดียว) แล้วกดอัปโหลด ระบบจะประมวลผลทีละใบ</p>
+<div class="wrap">
+  <div class="page-head">
+    <div style="flex:1;min-width:0">
+      <h1 id="pageTitle">รายการใบกำกับภาษี</h1>
+      <p id="pageSub">สกัดข้อมูลและตรวจสอบอัตโนมัติ</p>
+    </div>
+    <a class="btn btn-sm" href="/summary">สรุปยอด →</a>
+  </div>
 
-<div class="picker">
-  <input type="file" id="fileInput" accept="image/*" multiple>
-  <label for="fileInput">📷 เลือกรูปใบกำกับภาษี</label>
-  <div class="count" id="fileCount">ยังไม่ได้เลือกรูป</div>
+  <div class="done-banner" id="doneBanner">สกัดข้อมูลครบทุกรายการแล้ว ✓</div>
+
+  <div class="progress-card" id="progressCard">
+    <div class="progress-top">
+      <span class="lbl" id="progressLbl">สกัดแล้ว 0/0 รายการ</span>
+      <span class="pct" id="progressPct">0%</span>
+    </div>
+    <div class="progress-bar"><div id="progressFill"></div></div>
+    <div class="progress-eta" id="progressEta"></div>
+  </div>
+
+  <div class="rows" id="rows"></div>
+
+  <div class="empty-cta" id="emptyCta">
+    <p>ยังไม่มีใบกำกับภาษีในรายการ</p>
+    <button class="btn btn-primary" id="emptyAddBtn">+ เพิ่มใบกำกับภาษี</button>
+  </div>
 </div>
 
-<button id="uploadBtn" disabled>อัปโหลดและประมวลผล</button>
-
-<div class="progress-wrap" id="progressWrap">
-  <div class="progress-text" id="progressText">กำลังประมวลผล 0/0</div>
-  <div class="progress-bar"><div id="progressFill"></div></div>
-  <div class="progress-eta" id="progressEta"></div>
+<div class="bottombar" id="bottomBar">
+  <div class="bottombar-inner">
+    <div class="total-line">
+      <span>
+        <span class="cap">ยอดรวมทั้งหมด</span><br>
+        <span class="amt" id="totalAmt">฿0.00</span>
+      </span>
+      <span class="n" id="totalN"></span>
+    </div>
+    <div id="barActs">
+      <div class="acts">
+        <button class="btn" id="btnCsv">ดาวน์โหลด CSV (Excel)</button>
+        <button class="btn" id="btnJson">ดาวน์โหลด JSON</button>
+      </div>
+      <button class="btn btn-primary btn-block" id="addMoreBtn">+ เพิ่มใบกำกับภาษี</button>
+    </div>
+    <div class="acts" id="runActs" style="display:none">
+      <button class="btn btn-danger btn-block" id="btnCancel">ยกเลิก</button>
+    </div>
+  </div>
 </div>
 
-<div id="results"></div>
+<!-- แผ่นเลื่อนขึ้น: เพิ่มใบกำกับภาษี -->
+<div class="sheet-back" id="sheetBack">
+  <div class="sheet">
+    <div class="grip"></div>
+    <h2>เพิ่มใบกำกับภาษี</h2>
+
+    <button class="opt" id="optCamera">
+      <span class="opt-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span>
+      <span>
+        <span class="t">ถ่ายภาพ</span><br>
+        <span class="s">ถ่ายทีละใบ หรือถ่ายหลายใบแล้วสกัดทีเดียว</span>
+      </span>
+    </button>
+
+    <button class="opt" id="optFiles">
+      <span class="opt-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+      <span>
+        <span class="t">เลือกไฟล์จากเครื่อง</span><br>
+        <span class="s">เลือกได้หลายไฟล์พร้อมกัน รองรับ JPG, PNG</span>
+      </span>
+    </button>
+
+    <div class="drop" id="drop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      ลากไฟล์มาวางที่นี่
+    </div>
+
+    <input type="file" id="fileInput" accept="image/*" multiple>
+    <input type="file" id="camFallbackInput" accept="image/*" capture="environment" multiple>
+    <button class="btn btn-ghost btn-block" id="sheetCancel">ยกเลิก</button>
+  </div>
+</div>
+
+<!-- หน้ากล้อง -->
+<div class="camera" id="camera">
+  <div class="cam-top">
+    <button class="cam-btn" id="camClose">✕</button>
+    <div class="seg">
+      <button id="modeOne">ถ่ายทีละใบ</button>
+      <button id="modeMany" class="on">ถ่ายหลายใบ</button>
+    </div>
+    <button class="cam-btn" id="camFlip">⟳</button>
+  </div>
+  <div class="cam-stage" id="camStage">
+    <video id="camVideo" autoplay playsinline muted></video>
+    <div class="cam-frame" id="camFrame"></div>
+    <div class="cam-msg" id="camMsg" style="display:none"></div>
+  </div>
+  <div class="cam-bottom">
+    <div class="shots" id="shots"></div>
+    <div class="cam-row">
+      <button class="cam-btn" id="camPick" title="เลือกจากไฟล์แทน">🖼</button>
+      <button class="shutter" id="shutter"></button>
+      <button class="cam-go" id="camGo" disabled>สกัดข้อมูล (0) →</button>
+    </div>
+  </div>
+</div>
+
+<!-- หน้าเลือกไฟล์: ติ๊กถูกได้หลายไฟล์ -->
+<div class="picker" id="picker">
+  <div class="pk-top">
+    <button id="pkBack">‹ กลับ</button>
+    <span class="t">เลือกไฟล์</span>
+    <button id="pkAll">ทั้งหมด</button>
+  </div>
+  <div class="pk-grid" id="pkGrid"></div>
+  <div class="pk-bottom">
+    <div class="cnt" id="pkCount">0 ไฟล์ที่เลือก</div>
+    <button class="btn btn-primary btn-block" id="pkGo">สกัดข้อมูล</button>
+  </div>
+</div>
+
+<!-- กล่องยืนยันก่อนบันทึก -->
+<div class="modal-back" id="confirmBack">
+  <div class="modal">
+    <div class="m-title" id="confirmTitle">ยืนยันการแก้ไข</div>
+    <div class="m-body" id="confirmBody"></div>
+    <div class="m-acts">
+      <button class="btn" id="confirmNo">ยกเลิก</button>
+      <button class="btn btn-primary" id="confirmYes">ตกลง</button>
+    </div>
+  </div>
+</div>
+
+<!-- หน้ารายละเอียด: รูปใหญ่ซ้าย ฟอร์มแก้ไขขวา -->
+<div class="detail" id="detail">
+  <div class="detail-head">
+    <button class="btn btn-sm" id="btnBack">← กลับ</button>
+    <div class="who">
+      <div class="title" id="detailTitle"></div>
+      <div class="meta" id="detailMeta"></div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn btn-sm" id="btnRetry">อ่านใหม่</button>
+    <button class="btn btn-sm" id="btnDel">ลบ</button>
+    <div class="divider"></div>
+    <button class="btn btn-sm" id="btnPrev">← ก่อนหน้า</button>
+    <button class="btn btn-sm" id="btnNext">ถัดไป →</button>
+    <button class="btn btn-sm btn-primary" id="btnSave" disabled>บันทึก</button>
+  </div>
+  <div class="detail-body">
+    <div class="detail-img" id="detailImgBox">
+      <div class="imgtools">
+        <button id="btnZoom" title="ซูมเข้า/ออก" aria-label="ซูมเข้า/ออก">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        </button>
+        <button id="btnRot" title="หมุนรูป 90 องศา" aria-label="หมุนรูป 90 องศา">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 4 21 10 15 10"/></svg>
+        </button>
+      </div>
+      <img id="detailImg" alt="">
+    </div>
+    <div class="detail-form" id="detailForm"></div>
+  </div>
+</div>
 
 <script>
+// ══════════════════════════════════════════════════════════
+// state
+// ══════════════════════════════════════════════════════════
 let META = null;
-let queue = [];          // ไฟล์ที่รอประมวลผล -- เลือกเพิ่มได้เรื่อยๆ ไม่ถูกแทนที่
-let isProcessing = false; // กันกดอัปโหลดซ้ำตอนรอบก่อนยังไม่เสร็จ (เคยยิงซ้อนกัน)
-let cardSeq = 0;
+let queue = [];            // [{file, rowEl}] รอสกัด
+let isProcessing = false;
+let cancelRequested = false;
+let seq = 0;
+const RECS = [];
+let downloaded = true;
+let curIdx = -1;
+let doneThisRun = 0, totalThisRun = 0;
 
-const fileInput   = document.getElementById('fileInput');
-const fileCount   = document.getElementById('fileCount');
-const uploadBtn   = document.getElementById('uploadBtn');
-const progressWrap= document.getElementById('progressWrap');
-const progressText= document.getElementById('progressText');
-const progressFill= document.getElementById('progressFill');
-const progressEta = document.getElementById('progressEta');
-const resultsEl   = document.getElementById('results');
+const $ = id => document.getElementById(id);
+const rowsEl = $('rows'), progressCard = $('progressCard'), doneBanner = $('doneBanner');
+const bottomBar = $('bottomBar'), emptyCta = $('emptyCta');
+const sheetBack = $('sheetBack'), dropEl = $('drop');
+const fileInput = $('fileInput');
+const detailEl = $('detail'), detailImg = $('detailImg'), detailImgBox = $('detailImgBox');
+const detailForm = $('detailForm'), detailTitle = $('detailTitle'), detailMeta = $('detailMeta');
 
-fetch('/meta').then(r => r.json()).then(m => { META = m; }).catch(() => {});
-
-function updatePicker() {
-  fileCount.textContent = queue.length
-    ? `รอประมวลผล ${queue.length} รูป` + (isProcessing ? ' (กำลังทำงานอยู่ รูปใหม่จะต่อคิวให้)' : '')
-    : (isProcessing ? 'กำลังประมวลผล...' : 'ยังไม่ได้เลือกรูป');
-  uploadBtn.disabled = queue.length === 0 || isProcessing;
+let metaReady = loadMeta();
+function loadMeta() {
+  return fetch('/meta').then(r => r.json()).then(m => { META = m; }).catch(() => { META = null; });
 }
 
+const pad3 = n => String(n).padStart(3, '0');
+// ' ' = ช่องว่างบาง -- ฟอนต์ไทยหลายตัววาง ฿ ชิดตัวเลขจนดูซ้อนกัน
+const baht = n => '฿ ' + n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** ลำดับใบตามที่เห็นจริงในลิสต์ (อิง DOM) -- ใช้กับปุ่มก่อนหน้า/ถัดไป */
+function ordered() {
+  const kids = [...rowsEl.children];
+  return RECS.slice().sort((a, b) => kids.indexOf(a.rowEl) - kids.indexOf(b.rowEl));
+}
+
+// ══════════════════════════════════════════════════════════
+// ตรวจความสมเหตุสมผลฝั่ง browser (ให้เตือนสดตอนพิมพ์แก้)
+// *** กฎต้องตรงกับ postprocess.py เป๊ะ *** -- ที่ต้องมีสองที่เพราะฝั่ง server
+// ตรวจตอนอ่านเสร็จครั้งเดียว แต่หน้านี้ต้องเตือนใหม่ทุกครั้งที่ผู้ใช้แก้ตัวเลข
+// ถ้าแก้กฎใน postprocess.py ต้องมาแก้ที่นี่ด้วย (tolerance 0.02, VAT 6.5-7.5%)
+// ══════════════════════════════════════════════════════════
+const TOLERANCE = 0.02;
+
+function taxStatus(v) {
+  const t = (v || '').trim();
+  if (!t) return 'empty';
+  const d = t.replace(/[^0-9]/g, '');
+  if (d.length === 13 && d === t) {
+    let s = 0;
+    for (let i = 0; i < 12; i++) s += parseInt(d[i], 10) * (13 - i);
+    return ((11 - s % 11) % 10) === parseInt(d[12], 10) ? 'valid' : 'checksum';
+  }
+  if (d.length === 10 && d === t) return 'legacy';   // format เก่าก่อน พ.ศ. 2555
+  return 'malformed';
+}
+
+function num(v) {
+  const s = String(v ?? '').replace(/,/g, '').replace(/\s/g, '').trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+const money = n => n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** คืน [{text, keys:[field ที่ควรไฮไลต์]}] -- ว่าง = ไม่พบสิ่งผิดปกติ */
+function checkRecord(rec) {
+  const f = rec.fields, out = [];
+
+  for (const side of ['seller_tax_id', 'buyer_tax_id']) {
+    const st = taxStatus(f[side]);
+    if (st === 'checksum') {
+      out.push({ text: `${labelOf(side)}ไม่ผ่าน checksum: ${f[side]} (น่าจะอ่านผิดอย่างน้อย 1 หลัก)`, keys: [side] });
+    } else if (st === 'malformed') {
+      out.push({ text: `${labelOf(side)}ไม่ใช่เลข 13 หลัก (หรือ 10 หลักแบบเก่า): ${f[side]}`, keys: [side] });
+    }
+  }
+
+  const subtotal = num(f.subtotal), vat = num(f.vat), grand = num(f.grand_total);
+  const discount = num(f.discount) || 0;
+
+  if (subtotal !== null && vat !== null && grand !== null) {
+    const expected = subtotal - discount + vat;
+    if (Math.abs(expected - grand) > TOLERANCE) {
+      out.push({
+        text: `เงินไม่ลงตัว: ยอดก่อน VAT − ส่วนลด + VAT = ${money(expected)} แต่ยอดหลัง VAT = ${money(grand)}`,
+        keys: ['subtotal', 'discount', 'vat', 'grand_total'],
+      });
+    }
+  }
+  if (subtotal !== null && vat !== null && vat > 0) {
+    const base = subtotal - discount;
+    if (base > 0) {
+      const rate = vat / base;
+      if (!(rate >= 0.065 && rate <= 0.075)) {
+        out.push({ text: `VAT คิดเป็น ${(rate * 100).toFixed(1)}% ของยอดหลังส่วนลด (ปกติ ~7%)`, keys: ['vat'] });
+      }
+    }
+  }
+
+  const amounts = rec.items.map(it => num(it.amount));
+  if (amounts.length && amounts.every(a => a !== null) && subtotal !== null) {
+    const sum = amounts.reduce((a, b) => a + b, 0);
+    // ใบที่ราคารวม VAT ในตัวแล้ว (sum/1.07 == subtotal) ก็ถือว่าลงตัว
+    if (Math.abs(sum - subtotal) > TOLERANCE && Math.abs(sum / 1.07 - subtotal) > TOLERANCE) {
+      out.push({ text: `ผลรวมรายการ ${money(sum)} ไม่ตรงยอดก่อน VAT ${money(subtotal)}`, keys: ['subtotal'] });
+    }
+  }
+  return out;
+}
+
+function labelOf(key) {
+  if (!META) return key;
+  for (const g of META.ui_groups || []) {
+    const hit = g.fields.find(x => x.key === key);
+    if (hit) return hit.label;
+  }
+  return key;
+}
+
+// ══════════════════════════════════════════════════════════
+// แผ่นเลื่อน "เพิ่มใบกำกับภาษี"
+// ══════════════════════════════════════════════════════════
+function openSheet() { sheetBack.classList.add('show'); document.body.style.overflow = 'hidden'; }
+function closeSheet() { sheetBack.classList.remove('show'); document.body.style.overflow = ''; }
+
+$('emptyAddBtn').addEventListener('click', openSheet);
+$('addMoreBtn').addEventListener('click', openSheet);
+$('sheetCancel').addEventListener('click', closeSheet);
+sheetBack.addEventListener('click', e => { if (e.target === sheetBack) closeSheet(); });
+$('optCamera').addEventListener('click', () => { closeSheet(); openCamera(); });
+$('optFiles').addEventListener('click', () => fileInput.click());
+
+// เลือกไฟล์แล้วไม่สกัดทันที -- เข้าหน้าติ๊กเลือกก่อน (ตามดีไซน์)
 fileInput.addEventListener('change', () => {
-  // เพิ่มเข้าคิวแทนการแทนที่ -- เลือกรูปหลายรอบได้ ไม่ต้องเลือกรวมทีเดียว
-  queue.push(...Array.from(fileInput.files));
-  fileInput.value = ''; // เคลียร์ input เพื่อให้เลือกไฟล์เดิมซ้ำได้อีกถ้าต้องการ
-  updatePicker();
+  const files = [...fileInput.files];
+  fileInput.value = '';
+  if (files.length) openPicker(files);
+});
+$('camFallbackInput').addEventListener('change', () => {
+  const files = [...$('camFallbackInput').files];
+  $('camFallbackInput').value = '';
+  if (files.length) { closeCamera(); openPicker(files); }
 });
 
-uploadBtn.addEventListener('click', async () => {
-  // กันชนกัน: ถ้ากำลังประมวลผลอยู่แล้ว การกดซ้ำจะไม่มีผล (uploadBtn ก็ disabled
-  // อยู่แล้วระหว่างทำงาน แต่กันไว้อีกชั้นเผื่อ event ยิงซ้ำ)
-  if (isProcessing || queue.length === 0) return;
+// ลากไฟล์มาวาง
+['dragenter', 'dragover'].forEach(ev => {
+  dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.add('over'); });
+  document.addEventListener(ev, e => e.preventDefault());
+});
+['dragleave', 'drop'].forEach(ev => dropEl.addEventListener(ev, () => dropEl.classList.remove('over')));
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const files = [...(e.dataTransfer?.files || [])].filter(f => f.type.startsWith('image/'));
+  if (files.length) openPicker(files);
+});
+
+// ══════════════════════════════════════════════════════════
+// หน้าเลือกไฟล์ (ติ๊กถูกได้หลายไฟล์)
+// ══════════════════════════════════════════════════════════
+const pickerEl = $('picker'), pkGrid = $('pkGrid');
+let pkFiles = [];          // [{file, url, on}]
+
+function openPicker(files) {
+  closeSheet();
+  pkFiles = files.map(file => ({ file, url: URL.createObjectURL(file), on: true }));
+  renderPicker();
+  pickerEl.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function closePicker() {
+  pkFiles.forEach(p => URL.revokeObjectURL(p.url));
+  pkFiles = [];
+  pkGrid.replaceChildren();
+  pickerEl.classList.remove('show');
+  document.body.style.overflow = '';
+}
+
+function renderPicker() {
+  pkGrid.replaceChildren(...pkFiles.map((p, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'pk-cell' + (p.on ? ' on' : '');
+    cell.innerHTML = `
+      <div class="pk-thumb"><img src="${p.url}" alt=""><span class="pk-check">✓</span></div>
+      <div class="pk-name">${esc(p.file.name)}</div>`;
+    cell.addEventListener('click', () => {
+      p.on = !p.on;
+      cell.classList.toggle('on', p.on);
+      updatePkCount();
+    });
+    return cell;
+  }));
+  updatePkCount();
+}
+
+function updatePkCount() {
+  const n = pkFiles.filter(p => p.on).length;
+  $('pkCount').textContent = `${n} ไฟล์ที่เลือก`;
+  $('pkGo').disabled = n === 0;
+}
+
+$('pkBack').addEventListener('click', closePicker);
+$('pkAll').addEventListener('click', () => {
+  const allOn = pkFiles.every(p => p.on);
+  pkFiles.forEach(p => { p.on = !allOn; });      // กดซ้ำ = เลือกทั้งหมด / ยกเลิกทั้งหมด
+  renderPicker();
+});
+$('pkGo').addEventListener('click', () => {
+  const files = pkFiles.filter(p => p.on).map(p => p.file);
+  closePicker();
+  addFiles(files);
+});
+
+// ══════════════════════════════════════════════════════════
+// หน้ากล้อง (ใช้กล้องจริงผ่าน getUserMedia)
+// ══════════════════════════════════════════════════════════
+const cameraEl = $('camera'), camVideo = $('camVideo'), camMsg = $('camMsg');
+let camStream = null, facing = 'environment', shots = [], multiMode = true;
+
+async function openCamera() {
+  cameraEl.classList.add('show');
+  document.body.style.overflow = 'hidden';
+  shots = [];
+  renderShots();
+  await startStream();
+}
+
+async function startStream() {
+  stopStream();
+  // getUserMedia ใช้ได้เฉพาะ secure context (https หรือ localhost) --
+  // ถ้าเปิดผ่าน http://192.168.x.x เบราว์เซอร์จะบล็อก ต้องถอยไปใช้แอปกล้องของเครื่อง
+  const canUse = !!navigator.mediaDevices?.getUserMedia;
+  if (!canUse) return showCamFallback('เบราว์เซอร์ไม่อนุญาตให้ใช้กล้องเมื่อเปิดผ่าน http ธรรมดา');
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false,
+    });
+    camVideo.srcObject = camStream;
+    // ต้องสั่ง play() เอง -- iOS Safari ไม่เริ่มเล่นให้เองแม้ใส่ autoplay และบางเบราว์เซอร์
+    // ก็ค้างที่เฟรมว่าง (videoWidth = 0) จนกดชัตเตอร์แล้วได้รูปเปล่า
+    await camVideo.play().catch(() => {});
+    camVideo.style.display = '';
+    $('camFrame').style.display = '';
+    camMsg.style.display = 'none';
+    $('shutter').disabled = false;
+  } catch (e) {
+    showCamFallback(e.name === 'NotAllowedError' ? 'ยังไม่ได้อนุญาตให้เว็บใช้กล้อง' : 'เปิดกล้องไม่สำเร็จ');
+  }
+}
+
+function showCamFallback(why) {
+  camVideo.style.display = 'none';
+  $('camFrame').style.display = 'none';
+  $('shutter').disabled = true;
+  camMsg.style.display = '';
+  camMsg.innerHTML = `${esc(why)}<br>ใช้แอปกล้องของเครื่องแทนได้<br>` +
+    '<button class="btn btn-primary" id="camNative">เปิดแอปกล้อง</button>';
+  $('camNative').addEventListener('click', () => $('camFallbackInput').click());
+}
+
+function stopStream() {
+  camStream?.getTracks().forEach(t => t.stop());
+  camStream = null;
+}
+
+function closeCamera() {
+  stopStream();
+  cameraEl.classList.remove('show');
+  document.body.style.overflow = '';
+  shots = [];
+  renderShots();
+}
+
+function renderShots() {
+  const box = $('shots');
+  const show = shots.slice(-3);
+  box.innerHTML = show.map(s => `<img src="${s.url}" alt="">`).join('') +
+    (shots.length > 3 ? `<span class="more">${shots.length}</span>` : '') +
+    (shots.length ? `<span class="cnt">ถ่ายแล้ว ${shots.length} ใบ</span>` : '');
+  $('camGo').textContent = `สกัดข้อมูล (${shots.length}) →`;
+  $('camGo').disabled = shots.length === 0;
+}
+
+$('shutter').addEventListener('click', () => {
+  if (!camStream || !camVideo.videoWidth) return;
+  const c = document.createElement('canvas');
+  c.width = camVideo.videoWidth;
+  c.height = camVideo.videoHeight;
+  c.getContext('2d').drawImage(camVideo, 0, 0);
+  c.toBlob(b => {
+    const file = new File([b], `ถ่าย_${shots.length + 1}_${Date.now()}.jpg`, { type: 'image/jpeg' });
+    shots.push({ file, url: URL.createObjectURL(b) });
+    renderShots();
+    if (!multiMode) $('camGo').click();     // โหมดถ่ายทีละใบ = ถ่ายเสร็จไปต่อเลย
+  }, 'image/jpeg', 0.92);
+});
+
+$('camGo').addEventListener('click', () => {
+  const files = shots.map(s => s.file);
+  shots.forEach(s => URL.revokeObjectURL(s.url));
+  shots = [];
+  closeCamera();
+  addFiles(files);
+});
+
+$('camClose').addEventListener('click', closeCamera);
+$('camPick').addEventListener('click', () => fileInput.click());
+$('camFlip').addEventListener('click', () => {
+  facing = facing === 'environment' ? 'user' : 'environment';
+  startStream();
+});
+$('modeOne').addEventListener('click', () => setMode(false));
+$('modeMany').addEventListener('click', () => setMode(true));
+function setMode(many) {
+  multiMode = many;
+  $('modeMany').classList.toggle('on', many);
+  $('modeOne').classList.toggle('on', !many);
+}
+
+// ══════════════════════════════════════════════════════════
+// คิว + วนสกัด
+// ══════════════════════════════════════════════════════════
+function addFiles(files) {
+  if (!files.length) return;
+  for (const file of files) {
+    const rowEl = buildQueuedRow(file);
+    rowsEl.appendChild(rowEl);
+    queue.push({ file, rowEl });
+  }
+  refreshUI();
+  run();
+}
+
+async function run() {
+  if (isProcessing) return;
   isProcessing = true;
-  updatePicker();
-  progressWrap.style.display = 'block';
+  cancelRequested = false;
+  doneThisRun = 0;
+  totalThisRun = queue.length;
+  refreshUI();
+
+  await metaReady;
+  if (!META) { metaReady = loadMeta(); await metaReady; }
+  if (!META) {
+    $('progressLbl').textContent = 'ติดต่อเซิร์ฟเวอร์ไม่ได้ — ลองรีเฟรชหน้าเว็บ';
+    isProcessing = false;
+    refreshUI();
+    return;
+  }
 
   const times = [];
-  let doneCount = 0;
-
-  // ดึงจากคิวไปเรื่อยๆ จนว่าง -- ถ้าผู้ใช้เพิ่มรูปใหม่เข้ามาระหว่างนี้
-  // (fileInput ยังกดเลือกได้ตลอด) จะถูกดึงมาทำต่อในลูปเดียวกันอัตโนมัติ
-  while (queue.length > 0) {
-    const file = queue.shift();
-    const total = doneCount + queue.length + 1;
-    progressText.textContent = `กำลังประมวลผล ${doneCount + 1}/${total}: ${file.name}`;
-    progressFill.style.width = `${(doneCount / total) * 100}%`;
-
-    if (times.length > 0) {
-      const avg = times.reduce((a, b) => a + b, 0) / times.length;
-      progressEta.textContent = `เหลืออีกประมาณ ${Math.round(avg * (queue.length + 1))} วินาที`;
-    } else {
-      progressEta.textContent = 'กำลังโหลดโมเดล (ใบแรกอาจช้ากว่าปกติ)...';
-    }
-
-    const card = renderPendingCard(file.name, cardSeq++);
-    resultsEl.appendChild(card); // ต่อท้ายผลลัพธ์เดิม ไม่ล้างของเก่า
+  while (queue.length && !cancelRequested) {
+    const { file, rowEl } = queue.shift();
+    totalThisRun = doneThisRun + queue.length + 1;
+    setRowActive(rowEl, file);
+    updateProgress(times);
 
     const t0 = performance.now();
     try {
@@ -182,99 +855,606 @@ uploadBtn.addEventListener('click', async () => {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail || `HTTP ${res.status}`);
       }
-      const data = await res.json();
-      times.push((performance.now() - t0) / 1000);
-      card.replaceWith(renderResultCard(file.name, data));
+      const rec = makeRecord(++seq, file, await res.json());
+      rowEl.replaceWith(rec.rowEl);
+      downloaded = false;
     } catch (e) {
-      times.push((performance.now() - t0) / 1000);
-      card.replaceWith(renderErrorCard(file.name, e.message));
+      rowEl.replaceWith(buildErrorRow(file, e.message));
     }
-    doneCount++;
-    updatePicker();
+    times.push((performance.now() - t0) / 1000);
+    doneThisRun++;
+    refreshUI();
+    if (detailEl.classList.contains('show')) updateNav();
   }
 
-  progressFill.style.width = '100%';
-  progressText.textContent = `เสร็จแล้ว ${doneCount}/${doneCount} ใบ`;
-  progressEta.textContent = '';
+  if (cancelRequested) {          // ใบที่ยังไม่ได้สกัดถูกเอาออกจากลิสต์
+    queue.forEach(q => q.rowEl.remove());
+    queue = [];
+  }
   isProcessing = false;
-  updatePicker();
+  updateProgress([]);
+  refreshUI();
+}
+
+$('btnCancel').addEventListener('click', () => { cancelRequested = true; });
+
+function updateProgress(times) {
+  const total = Math.max(totalThisRun, 1);
+  const pct = Math.round((doneThisRun / total) * 100);
+  $('progressLbl').textContent = `สกัดแล้ว ${doneThisRun}/${totalThisRun} รายการ`;
+  $('progressPct').textContent = pct + '%';
+  $('progressFill').style.width = pct + '%';
+  progressCard.classList.toggle('complete', pct >= 100);
+  $('progressEta').textContent = (isProcessing && times.length)
+    ? `เหลืออีกประมาณ ${Math.round((times.reduce((a, b) => a + b, 0) / times.length) * (queue.length + 1))} วินาที`
+    : (isProcessing ? 'ระบบ AI กำลังตรวจสอบความถูกต้อง...' : '');
+}
+
+function refreshUI() {
+  const any = RECS.length || queue.length || isProcessing;
+  emptyCta.style.display = any ? 'none' : '';
+  progressCard.classList.toggle('show', !!any);
+  bottomBar.classList.toggle('show', !!any);
+
+  const allDone = RECS.length > 0 && !queue.length && !isProcessing;
+  doneBanner.classList.toggle('show', allDone);
+  $('pageTitle').textContent = isProcessing ? 'กำลังสกัดข้อมูล'
+    : (allDone ? 'สกัดข้อมูลเสร็จสิ้น' : 'รายการใบกำกับภาษี');
+  $('pageSub').textContent = isProcessing ? 'ระบบ AI กำลังตรวจสอบความถูกต้อง'
+    : (allDone ? 'ข้อมูลพร้อมตรวจสอบความถูกต้องแล้ว' : 'สกัดข้อมูลและตรวจสอบอัตโนมัติ');
+
+  $('runActs').style.display = isProcessing ? '' : 'none';
+  $('barActs').style.display = isProcessing ? 'none' : '';   // เป็น block ไม่ใช่ flex แล้ว
+
+  const total = RECS.reduce((s, r) => s + (num(collect(r).fields.grand_total) || 0), 0);
+  const todo = RECS.filter(r => r.flags.length).length;
+  const unsaved = RECS.filter(r => r.dirty).length;
+  $('totalAmt').textContent = baht(total);
+  $('totalN').textContent = `(${RECS.length} รายการ`
+    + (todo ? ` · ต้องตรวจ ${todo}` : '')
+    + (unsaved ? ` · ยังไม่บันทึก ${unsaved}` : '') + ')';
+}
+
+// ══════════════════════════════════════════════════════════
+// แถวในลิสต์
+// ══════════════════════════════════════════════════════════
+function buildQueuedRow(file) {
+  const el = document.createElement('div');
+  el.className = 'row-item queued';
+  el.innerHTML = `
+    <span class="row-ic plain">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+    </span>
+    <span class="row-body">
+      <span class="row-name">${esc(file.name)}</span>
+      <span class="row-sub">รอคิว</span>
+    </span>`;
+  return el;
+}
+
+function setRowActive(el, file) {
+  el.className = 'row-item active';
+  el.innerHTML = `
+    <span class="row-ic plain"><span class="spinner"></span></span>
+    <span class="row-body">
+      <span class="row-name">${esc(file.name)}</span>
+      <span class="row-sub">กำลังสกัด...</span>
+      <span class="row-mini"><div></div></span>
+    </span>`;
+}
+
+function buildErrorRow(file, message) {
+  const el = document.createElement('div');
+  el.className = 'row-item err';
+  el.innerHTML = `
+    <span class="row-ic plain">!</span>
+    <span class="row-body">
+      <span class="row-name">${esc(file.name)}</span>
+      <span class="row-sub">อ่านไม่สำเร็จ: ${esc(message)}</span>
+    </span>`;
+  const b = document.createElement('button');
+  b.className = 'btn btn-sm';
+  b.textContent = 'ลองใหม่';
+  b.addEventListener('click', e => {
+    e.stopPropagation();
+    const fresh = buildQueuedRow(file);   // ถือ element ไว้ตรงๆ ไม่ต้องไปค้นหาใน DOM ทีหลัง
+    el.replaceWith(fresh);
+    queue.push({ file, rowEl: fresh });
+    refreshUI();
+    run();
+  });
+  el.appendChild(b);
+  return el;
+}
+
+function buildResultRow(rec) {
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = 'row-item';
+  el.innerHTML = `
+    <span class="row-ic"><span class="tick"></span></span>
+    <span class="row-body">
+      <span class="row-name"></span>
+      <span class="row-sub"></span>
+    </span>
+    <span class="row-chev">›</span>`;
+  el.addEventListener('click', () => openDetail(ordered().indexOf(rec)));
+  return el;
+}
+
+function refreshRow(rec) {
+  const f = collect(rec).fields;
+  const name = (f.seller_name_th || '').trim() || rec.file.name;
+  const total = num(f.grand_total);
+  const el = rec.rowEl;
+
+  el.classList.toggle('todo', rec.flags.length > 0);
+  el.classList.toggle('ok', rec.flags.length === 0);
+  el.querySelector('.tick').textContent = rec.flags.length ? '!' : '✓';
+  el.querySelector('.row-name').textContent = name;
+  el.querySelector('.row-sub').textContent = rec.flags.length
+    ? `ต้องตรวจสอบ • ${rec.flags.length} จุด` + (total !== null ? ` • ${baht(total)}` : '')
+    : `สกัดสำเร็จ` + (total !== null ? ` • ${baht(total)}` : '');
+
+  // ป้ายบอกสถานะการบันทึก: แก้แล้วยังไม่กดบันทึก / บันทึกแล้ว
+  let edit = el.querySelector('.row-edit');
+  const label = rec.dirty ? 'ยังไม่ได้บันทึก' : (rec.saved ? 'บันทึกแล้ว' : '');
+  if (label && !edit) {
+    edit = document.createElement('span');
+    edit.className = 'row-edit';
+    el.insertBefore(edit, el.querySelector('.row-chev'));
+  } else if (!label && edit) {
+    edit.remove();
+    edit = null;
+  }
+  if (edit) {
+    edit.textContent = label;
+    edit.classList.toggle('unsaved', rec.dirty);
+  }
+}
+
+function makeRecord(no, file, data) {
+  const rec = { no, file, url: URL.createObjectURL(file), data, flags: [],
+                dirty: false, saved: false, reviewed: false, rotation: 0 };
+  rec.formEl = buildForm(rec, data);
+  rec.savedJson = JSON.stringify(collect(rec));   // ค่าตั้งต้นที่โมเดลอ่านมา = จุดอ้างอิงว่า "ยังไม่ได้แก้"
+  rec.rowEl = buildResultRow(rec);
+
+  rec.formEl.addEventListener('input', () => {
+    rec.dirty = isDirty(rec);
+    downloaded = false;
+    revalidate(rec);
+    updateSaveBtn();
+    refreshUI();
+  });
+
+  RECS.push(rec);
+  revalidate(rec);
+  return rec;
+}
+
+// ══════════════════════════════════════════════════════════
+// ฟอร์มที่แก้ไขได้ (1 ฟอร์มต่อ 1 ใบ -- ย้ายเข้า/ออกหน้ารายละเอียดได้ ค่าที่แก้ไม่หาย)
+// ══════════════════════════════════════════════════════════
+function buildForm(rec, data) {
+  const f = data.fields || {};
+  const fixes = data.master_list_fixes || [];
+  const fixByField = Object.fromEntries(fixes.map(x => [x.field, x]));
+
+  const form = document.createElement('div');
+
+  const hint = document.createElement('div');
+  hint.className = 'edit-hint';
+  hint.textContent = 'ทุกช่องด้านล่างพิมพ์แก้ได้ — คลิกที่ช่องแล้วแก้ได้เลย ระบบจะตรวจตัวเลขให้ใหม่ทันที';
+  form.appendChild(hint);
+
+  const banner = document.createElement('div');
+  banner.className = 'check-banner';
+  form.appendChild(banner);
+
+  const summaryKeys = new Set((META?.summary_fields || []).map(x => x.key));
+  let itemsPlaced = false;
+
+  for (const g of META?.ui_groups || []) {
+    // แทรกตารางสินค้าไว้ก่อนกลุ่มยอดเงิน (ลำดับเดียวกับที่ตาเห็นบนใบจริง)
+    if (!itemsPlaced && g.fields.some(x => summaryKeys.has(x.key))) {
+      form.appendChild(buildItemsTable(f.items || []));
+      itemsPlaced = true;
+    }
+    const t = document.createElement('div');
+    t.className = 'group-title';
+    t.textContent = g.title;
+    form.appendChild(t);
+    for (const fld of g.fields) form.appendChild(buildRow(fld, f[fld.key] || '', fixByField[fld.key]));
+  }
+  if (!itemsPlaced) form.appendChild(buildItemsTable(f.items || []));
+
+  if (fixes.length) {
+    const note = document.createElement('div');
+    note.className = 'ml-note';
+    // ไม่ใช้สัญลักษณ์ตัวหายาก -- ฟอนต์ไทยบางตัวเรนเดอร์ ℹ เพี้ยนเป็นสระอี
+    note.textContent = `หมายเหตุ: ${fixes.length} ช่องเติมจากตารางอ้างอิงคู่ค้า (ดูป้าย "ตารางอ้างอิง" ข้างช่อง)`;
+    form.appendChild(note);
+  }
+  return form;
+}
+
+function buildRow(fld, value, fix) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const badge = fix
+    ? `<span class="src-badge" title="เติมจากตารางอ้างอิง (${esc(fix.reason || '')}${fix.old ? ', เดิม: ' + esc(fix.old) : ''})">ตารางอ้างอิง</span>`
+    : '';
+  row.innerHTML = `
+    <span class="label">${esc(fld.label)}</span>
+    <span class="field"><input data-key="${esc(fld.key)}" value="${esc(value)}">${badge}</span>`;
+  return row;
+}
+
+function buildItemsTable(items) {
+  const box = document.createElement('div');
+  const cols = META?.item_fields || [];
+  if (!items.length || !cols.length) {
+    box.innerHTML = '<div class="items-title">รายการสินค้า</div>' +
+      '<div style="font-size:0.8rem;color:var(--muted);">— ไม่พบรายการสินค้าในใบนี้ —</div>';
+    return box;
+  }
+  box.innerHTML = '<div class="items-title">รายการสินค้า</div><div class="items-scroll">' +
+    '<table class="items"><thead><tr><th>#</th>' +
+    cols.map(c => `<th>${esc(c.label)}</th>`).join('') + '</tr></thead><tbody>' +
+    items.map((it, r) => `<tr><td style="color:var(--muted);font-size:0.72rem;">${r + 1}</td>` +
+      cols.map(c => `<td><input data-item-row="${r}" data-key="${esc(c.key)}" value="${esc(it[c.key] || '')}"></td>`).join('') +
+      '</tr>').join('') +
+    '</tbody></table></div>';
+  return box;
+}
+
+/** อ่านค่าปัจจุบันจากฟอร์ม (ค่าที่ผู้ใช้แก้แล้ว ไม่ใช่ค่าที่โมเดลตอบมาตอนแรก) */
+function collect(rec) {
+  const out = { filename: rec.file.name, fields: {}, items: [] };
+  rec.formEl.querySelectorAll('input[data-key]:not([data-item-row])')
+    .forEach(i => { out.fields[i.dataset.key] = i.value; });
+  const rows = {};
+  rec.formEl.querySelectorAll('input[data-item-row]').forEach(i => {
+    const r = i.dataset.itemRow;
+    (rows[r] = rows[r] || {})[i.dataset.key] = i.value;
+  });
+  out.items = Object.keys(rows).sort((a, b) => a - b).map(k => rows[k]);
+  return out;
+}
+
+function revalidate(rec) {
+  const problems = checkRecord(collect(rec));
+  const bad = new Set(problems.flatMap(p => p.keys));
+
+  rec.formEl.querySelectorAll('input[data-key]:not([data-item-row])')
+    .forEach(i => i.classList.toggle('bad', bad.has(i.dataset.key)));
+
+  const banner = rec.formEl.querySelector('.check-banner');
+  if (problems.length) {
+    banner.className = 'check-banner';
+    banner.innerHTML = '<strong>⚠ ควรตรวจสอบ:</strong>' +
+      problems.map(p => `<div>• ${esc(p.text)}</div>`).join('');
+  } else {
+    banner.className = 'check-banner ok';
+    banner.textContent = '✓ ตัวเลขลงตัว ไม่พบสิ่งผิดปกติ';
+  }
+  rec.flags = problems.map(p => p.text);
+  refreshRow(rec);
+}
+
+// ══════════════════════════════════════════════════════════
+// หน้ารายละเอียด
+// ══════════════════════════════════════════════════════════
+function openDetail(idx) {
+  if (idx < 0 || idx >= RECS.length) return;
+  curIdx = idx;
+  renderDetail();
+  detailEl.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDetail() {
+  const rec = ordered()[curIdx];
+  detailEl.classList.remove('show');
+  document.body.style.overflow = '';
+  detailForm.replaceChildren();   // คืนฟอร์มออกจากหน้า (ตัว node ยังอยู่ใน rec)
+  refreshUI();
+  if (rec) rec.rowEl.scrollIntoView({ block: 'center' });
+}
+
+function renderDetail() {
+  const rec = ordered()[curIdx];
+  if (!rec) return closeDetail();
+  rec.reviewed = true;
+  detailMeta.textContent = rec.file.name +
+    (rec.data.elapsed_sec != null ? ` · ${rec.data.elapsed_sec.toFixed(1)} วิ` : '');
+  detailImg.alt = rec.file.name;
+  detailImgBox.classList.remove('zoom');
+  detailImgBox.scrollTop = detailImgBox.scrollLeft = 0;
+  showImage(rec);
+  detailForm.replaceChildren(rec.formEl);
+  detailForm.scrollTop = 0;
+  updateNav();
+}
+
+function updateNav() {
+  const list = ordered();
+  $('btnPrev').disabled = curIdx <= 0;
+  $('btnNext').disabled = curIdx >= list.length - 1;
+  updateSaveBtn();
+  const rec = list[curIdx];
+  if (rec) {
+    const name = (collect(rec).fields.seller_name_th || '').trim() || rec.file.name;
+    detailTitle.textContent = `${name}  (${curIdx + 1}/${list.length})`;
+  }
+}
+
+function step(d) {
+  const next = curIdx + d;
+  if (next < 0 || next >= ordered().length) return;
+  curIdx = next;
+  renderDetail();
+}
+
+// ══════════════════════════════════════════════════════════
+// บันทึกการแก้ไข
+// เทียบกับ snapshot ตอนบันทึกครั้งล่าสุด (ไม่ใช่ธงบูลีนที่ติดตอนพิมพ์ตัวแรก)
+// -- ถ้าผู้ใช้พิมพ์แล้วลบกลับเป็นค่าเดิม จะถือว่าไม่มีอะไรต้องบันทึก
+// ══════════════════════════════════════════════════════════
+const isDirty = rec => JSON.stringify(collect(rec)) !== rec.savedJson;
+
+/** นับจำนวนช่องที่ค่าต่างจากตอนบันทึกล่าสุด (เอาไปบอกในกล่องยืนยัน) */
+function changedCount(rec) {
+  const now = collect(rec), was = JSON.parse(rec.savedJson);
+  let n = 0;
+  for (const k of new Set([...Object.keys(now.fields), ...Object.keys(was.fields)])) {
+    if (now.fields[k] !== was.fields[k]) n++;
+  }
+  for (let i = 0; i < Math.max(now.items.length, was.items.length); i++) {
+    const a = now.items[i] || {}, b = was.items[i] || {};
+    for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) if (a[k] !== b[k]) n++;
+  }
+  return n;
+}
+
+function updateSaveBtn() {
+  const rec = ordered()[curIdx];
+  $('btnSave').disabled = !rec || !rec.dirty;
+}
+
+// กล่องยืนยันแบบ promise -- คืน true ถ้ากดตกลง
+let confirmResolve = null;
+function askConfirm(title, bodyHtml) {
+  $('confirmTitle').textContent = title;
+  $('confirmBody').innerHTML = bodyHtml;
+  $('confirmBack').classList.add('show');
+  return new Promise(resolve => { confirmResolve = resolve; });
+}
+function closeConfirm(answer) {
+  $('confirmBack').classList.remove('show');
+  const r = confirmResolve;
+  confirmResolve = null;
+  if (r) r(answer);
+}
+$('confirmYes').addEventListener('click', () => closeConfirm(true));
+$('confirmNo').addEventListener('click', () => closeConfirm(false));
+$('confirmBack').addEventListener('click', e => { if (e.target === $('confirmBack')) closeConfirm(false); });
+
+$('btnSave').addEventListener('click', async () => {
+  const rec = ordered()[curIdx];
+  if (!rec || !rec.dirty) return;
+  const n = changedCount(rec);
+  const warn = rec.flags.length
+    ? `<br><span class="warn">หมายเหตุ: ใบนี้ยังมี ${rec.flags.length} จุดที่ระบบเตือนว่าตัวเลขไม่สมเหตุสมผล</span>`
+    : '';
+  const yes = await askConfirm('ยืนยันการแก้ไข',
+    `ยืนยันที่จะแก้ไขข้อมูลใบนี้จริงๆ ใช่ไหม?<br>มี <b>${n} ช่อง</b> ที่ถูกแก้${warn}`);
+  if (!yes) return;
+
+  const body = Object.assign(collect(rec), { flags: rec.flags });
+  $('btnSave').disabled = true;
+  $('btnSave').textContent = 'กำลังบันทึก...';
+  let res = null;
+  try {
+    const r = await fetch('/invoices', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
+    res = await r.json();
+  } catch (err) {
+    $('btnSave').textContent = 'บันทึก';
+    updateSaveBtn();
+    await askConfirm('บันทึกไม่สำเร็จ', `บันทึกลงฐานข้อมูลไม่ได้: ${esc(err.message)}<br>ข้อมูลที่แก้ยังอยู่ในหน้าจอ ลองใหม่อีกครั้งได้`);
+    return;
+  }
+
+  $('btnSave').textContent = 'บันทึก';
+  rec.savedJson = JSON.stringify(collect(rec));   // ตรึงค่าปัจจุบันเป็นค่าที่บันทึกแล้ว
+  rec.saved = true;
+  rec.dirty = false;
+  refreshRow(rec);
+  updateSaveBtn();
+  refreshUI();
+
+  if (res?.dup_number) {
+    await askConfirm('บันทึกแล้ว — แต่เลขที่ใบซ้ำ',
+      'ในฐานข้อมูลมีใบเลขที่นี้จากผู้ขายรายนี้อยู่แล้ว แต่วันที่หรือยอดเงินไม่ตรงกัน ' +
+      'ระบบเก็บไว้เป็นอีกใบหนึ่ง — ถ้าเป็นใบเดียวกันช่วยตรวจสอบด้วย');
+  }
 });
 
-function renderPendingCard(filename, idx) {
-  const div = document.createElement('div');
-  div.className = 'card';
-  div.id = `card-${idx}`;
-  div.innerHTML = `
-    <div class="card-head"><span><span class="spinner"></span>${escapeHtml(filename)}</span></div>
-    <div class="card-body" style="padding:14px;color:var(--muted);font-size:0.85rem;">กำลังอ่าน...</div>`;
-  return div;
+$('btnBack').addEventListener('click', closeDetail);
+$('btnPrev').addEventListener('click', () => step(-1));
+$('btnNext').addEventListener('click', () => step(1));
+
+$('btnDel').addEventListener('click', () => {
+  const rec = ordered()[curIdx];
+  if (!rec) return;
+  URL.revokeObjectURL(rec.url);
+  if (rec.rotUrl) URL.revokeObjectURL(rec.rotUrl);
+  rec.rowEl.remove();
+  RECS.splice(RECS.indexOf(rec), 1);
+  refreshUI();
+  if (!RECS.length) return closeDetail();
+  curIdx = Math.min(curIdx, RECS.length - 1);
+  renderDetail();
+});
+
+$('btnRetry').addEventListener('click', () => {
+  const rec = ordered()[curIdx];
+  if (!rec) return;
+  const { file, rowEl } = rec;
+  RECS.splice(RECS.indexOf(rec), 1);
+  URL.revokeObjectURL(rec.url);
+  closeDetail();
+  const fresh = buildQueuedRow(file);
+  rowEl.replaceWith(fresh);       // แถวใหม่อยู่ตำแหน่งเดิม -> ลำดับใน ordered() ไม่เปลี่ยน
+  queue.push({ file, rowEl: fresh });
+  refreshUI();
+  run();
+});
+
+// ── หมุนรูป ──
+// หมุนด้วย canvas ไม่ใช่ CSS transform: transform ไม่เปลี่ยนขนาดกล่อง layout ขอบเขต
+// scroll เลยไม่ตรงกับรูปที่ตาเห็น พอหมุนแล้วซูมจะเลื่อนดูบางส่วนไม่ได้ (วัดจริง:
+// หมุน 90 องศาแล้วส่วนบนหายไป 113px) วาดใหม่ลง canvas ได้รูปที่กว้าง/สูงสลับกันจริง
+function showImage(rec) {
+  rec.rotation = rec.rotation || 0;
+  if (!rec.rotation) { detailImg.src = rec.url; return; }
+  if (rec.rotUrl && rec.rotAngle === rec.rotation) { detailImg.src = rec.rotUrl; return; }
+
+  const src = new Image();
+  src.onload = () => {
+    try {
+      const swap = rec.rotation % 180 !== 0;
+      const c = document.createElement('canvas');
+      c.width  = swap ? src.naturalHeight : src.naturalWidth;
+      c.height = swap ? src.naturalWidth  : src.naturalHeight;
+      const g = c.getContext('2d');
+      g.translate(c.width / 2, c.height / 2);
+      g.rotate(rec.rotation * Math.PI / 180);
+      g.drawImage(src, -src.naturalWidth / 2, -src.naturalHeight / 2);
+      c.toBlob(b => {
+        if (rec.rotUrl) URL.revokeObjectURL(rec.rotUrl);
+        rec.rotUrl = URL.createObjectURL(b);
+        rec.rotAngle = rec.rotation;
+        if (ordered()[curIdx] === rec) detailImg.src = rec.rotUrl;   // ยังดูใบเดิมอยู่เท่านั้น
+      }, 'image/jpeg', 0.92);
+    } catch (err) {
+      detailImg.style.transform = `rotate(${rec.rotation}deg)`;      // ถอยไปใช้ transform ถ้า canvas ใช้ไม่ได้
+    }
+  };
+  src.src = rec.url;
 }
 
-function renderErrorCard(filename, message) {
-  const div = document.createElement('div');
-  div.className = 'card error';
-  div.innerHTML = `
-    <div class="card-head">${escapeHtml(filename)}</div>
-    <div class="card-body" style="padding:14px;color:var(--bad);font-size:0.85rem;">
-      อ่านไม่สำเร็จ: ${escapeHtml(message)}
-    </div>`;
-  return div;
-}
+$('btnRot').addEventListener('click', e => {
+  e.stopPropagation();
+  const rec = ordered()[curIdx];
+  if (!rec) return;
+  rec.rotation = ((rec.rotation || 0) + 90) % 360;
+  showImage(rec);
+});
 
-function renderResultCard(filename, data) {
-  const div = document.createElement('div');
-  div.className = 'card';
-  const f = data.fields || {};
-
-  let flagsHtml = '';
-  if (data.flags && data.flags.length) {
-    flagsHtml = '<div class="flag-banner">' +
-      '<strong>⚠ ควรตรวจสอบ:</strong>' +
-      data.flags.map(x => `<div>• ${escapeHtml(x)}</div>`).join('') +
-      '</div>';
+function toggleZoom() {
+  const zoomed = detailImgBox.classList.toggle('zoom');
+  if (zoomed) {
+    // ซูมเข้าแล้วให้เริ่มที่หัวกระดาษกึ่งกลางแนวนอน (ไม่ใช่มุมบนซ้าย)
+    requestAnimationFrame(() => {
+      detailImgBox.scrollLeft = (detailImgBox.scrollWidth - detailImgBox.clientWidth) / 2;
+      detailImgBox.scrollTop = 0;
+    });
   }
+}
+$('btnZoom').addEventListener('click', e => { e.stopPropagation(); toggleZoom(); });
+detailImg.addEventListener('click', toggleZoom);
 
-  const scalarRows = (META ? META.scalar_fields : []).map(fld =>
-    `<div class="row"><span class="label">${escapeHtml(fld.label)}</span>
-      <input data-key="${fld.key}" value="${escapeHtml(f[fld.key] || '')}"></div>`
-  ).join('');
-
-  const summaryRows = (META ? META.summary_fields : []).map(fld =>
-    `<div class="row"><span class="label">${escapeHtml(fld.label)}</span>
-      <input data-key="${fld.key}" value="${escapeHtml(f[fld.key] || '')}"></div>`
-  ).join('');
-
-  let itemsHtml = '';
-  const items = f.items || [];
-  if (items.length && META) {
-    const cols = META.item_fields;
-    itemsHtml = '<div class="items-title">รายการสินค้า</div><table class="items"><thead><tr>' +
-      cols.map(c => `<th>${escapeHtml(c.label)}</th>`).join('') + '</tr></thead><tbody>' +
-      items.map((it, r) => '<tr>' + cols.map(c =>
-        `<td><input data-item-row="${r}" data-key="${c.key}" value="${escapeHtml(it[c.key] || '')}"></td>`
-      ).join('') + '</tr>').join('') +
-      '</tbody></table>';
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if ($('confirmBack').classList.contains('show')) return closeConfirm(false);
+    if (cameraEl.classList.contains('show')) return closeCamera();
+    if (pickerEl.classList.contains('show')) return closePicker();
+    if (sheetBack.classList.contains('show')) return closeSheet();
   }
+  if (!detailEl.classList.contains('show')) return;
+  const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '');
+  if (e.key === 'Escape') { closeDetail(); return; }
+  if (typing) return;                       // อยู่ในช่องกรอก -> ลูกศรใช้เลื่อน cursor ตามปกติ
+  if (e.key === 'ArrowRight') step(1);
+  if (e.key === 'ArrowLeft') step(-1);
+});
 
-  div.innerHTML = `
-    <div class="card-head">
-      <span>${escapeHtml(filename)}</span>
-      <span class="time">${data.elapsed_sec != null ? data.elapsed_sec.toFixed(1) + ' วิ' : ''}</span>
-    </div>
-    <div class="card-body">
-      ${flagsHtml}
-      ${scalarRows}
-      ${itemsHtml}
-      ${summaryRows}
-    </div>`;
-  return div;
+// ══════════════════════════════════════════════════════════
+// ดาวน์โหลด (ทำฝั่ง browser ล้วน ไม่ต้องมี endpoint ฝั่ง server)
+// ══════════════════════════════════════════════════════════
+/** ไฟล์ที่ดาวน์โหลดเรียงตามลำดับที่สกัด (001, 002, ...) ให้ผลคาดเดาได้เวลาเข้าโปรแกรมบัญชี */
+function allRecords() {
+  return RECS.slice().sort((a, b) => a.no - b.no)
+    .map(r => Object.assign(collect(r), { no: pad3(r.no), flags: r.flags }));
 }
 
-function escapeHtml(s) {
+function stamp() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+function download(filename, text, mime) {
+  // '﻿' = BOM -- ถ้าไม่ใส่ Excel บน Windows จะเปิดไฟล์ CSV ภาษาไทยเป็นตัวยึกยือ
+  const blob = new Blob(['﻿' + text], { type: mime + ';charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  downloaded = true;
+  refreshUI();   // ดาวน์โหลดไม่เท่ากับบันทึก -- ไม่ไปล้างสถานะ "ยังไม่ได้บันทึก" ของใบไหน
+}
+
+const csvCell = v => {
+  const s = String(v ?? '');
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+
+$('btnCsv').addEventListener('click', () => {
+  if (!META) return;
+  // 1 บรรทัด = 1 รายการสินค้า (ข้อมูลระดับใบซ้ำทุกบรรทัดของใบเดียวกัน)
+  // -- รูปแบบมาตรฐานที่โปรแกรมบัญชีนำเข้าได้ และ pivot ใน Excel ได้ตรงๆ
+  const invCols = [...META.scalar_fields, ...META.summary_fields];
+  const header = ['รูปที่', 'ไฟล์', ...invCols.map(c => c.label), 'ลำดับรายการ',
+                  ...META.item_fields.map(c => c.label), 'ข้อสังเกต'];
+  const lines = [header.map(csvCell).join(',')];
+
+  for (const rec of allRecords()) {
+    const base = [rec.no, rec.filename, ...invCols.map(c => rec.fields[c.key] ?? '')];
+    const tail = rec.flags.join(' | ');
+    if (rec.items.length) {
+      rec.items.forEach((it, i) => {
+        lines.push([...base, i + 1, ...META.item_fields.map(c => it[c.key] ?? ''), tail].map(csvCell).join(','));
+      });
+    } else {
+      lines.push([...base, '', ...META.item_fields.map(() => ''), tail].map(csvCell).join(','));
+    }
+  }
+  download(`ใบกำกับภาษี_${stamp()}.csv`, lines.join('\r\n'), 'text/csv');
+});
+
+$('btnJson').addEventListener('click', () => {
+  download(`ใบกำกับภาษี_${stamp()}.json`, JSON.stringify(allRecords(), null, 2), 'application/json');
+});
+
+// กันปิดหน้าทิ้งทั้งที่ยังไม่ได้ดาวน์โหลด (ค่าที่แก้อยู่ใน browser อย่างเดียว)
+window.addEventListener('beforeunload', e => {
+  const unsaved = RECS.some(r => r.dirty);
+  if (RECS.length && (!downloaded || unsaved)) { e.preventDefault(); e.returnValue = ''; }
+});
+
+function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
-    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
 }
+
+refreshUI();
 </script>
 </body>
 </html>

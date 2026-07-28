@@ -34,7 +34,7 @@ from contextlib import asynccontextmanager
 import torch
 from PIL import Image, ImageOps
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.concurrency import run_in_threadpool
@@ -45,6 +45,7 @@ from peft import PeftModel
 
 import schema  # single source of truth: BASE_MODEL_ID + prompt + parser
 import postprocess
+import store    # ฐานข้อมูล SQLite เก็บใบที่ตรวจแล้ว + สรุปยอดรายเดือน/รายปี
 from master_list import build_master_live, apply_master, save_verified
 
 # model/processor class เลือกอัตโนมัติตาม BASE_MODEL_ID (Qwen2.5-VL หรือ Qwen3-VL)
@@ -145,6 +146,9 @@ def load_model():
         proc_src, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS,
         trust_remote_code=True, token=HF_TOKEN,
     )
+
+    store.init()      # ฐานข้อมูลใบที่ตรวจแล้ว (คนละตัวกับ master_db ที่เก็บตารางคู่ค้า)
+    print(f"ฐานข้อมูลใบกำกับ: {store.stats()['db']} ({store.stats()['invoices']} ใบที่บันทึกไว้)", flush=True)
 
     # build_master_live() อ่านจาก master_db (SQLite) -- seed ครั้งแรกจาก train
     # เท่านั้น (กัน data leakage เหมือนเดิม) แต่หลังจากนั้นโตขึ้นเรื่อยๆ จากพนักงาน
@@ -397,18 +401,64 @@ def meta():
     เขียนชื่อ field ซ้ำใน JS (schema.py เป็นแหล่งความจริงเดียวเหมือนเดิม)"""
     return {
         "scalar_fields": [{"key": k, "label": schema.LABELS.get(k, k)} for k in schema.SCALAR_FIELDS],
-        "item_fields":   [{"key": k, "label": schema.LABELS.get(k, k)} for k in schema.ITEM_FIELDS],
+        # ตารางสินค้าใช้ ITEM_LABELS (ไม่ใช่ LABELS) -- "discount" ระดับรายการ
+        # คือส่วนลดของบรรทัดนั้น ไม่ใช่ "ส่วนลดรวม" ของทั้งใบ
+        "item_fields":   [{"key": k, "label": schema.ITEM_LABELS.get(k, k)} for k in schema.ITEM_FIELDS],
         "summary_fields":[{"key": k, "label": schema.LABELS.get(k, k)} for k in schema.SUMMARY_FIELDS],
+        # กลุ่ม field สำหรับจัดหน้าฟอร์ม -- frontend ไม่ต้องรู้ว่า field ไหนอยู่กลุ่มไหน
+        "ui_groups":     [{"title": g["title"],
+                           "fields": [{"key": k, "label": schema.LABELS.get(k, k)} for k in g["fields"]]}
+                          for g in schema.UI_GROUPS],
     }
 
 
 @app.get("/", response_class=HTMLResponse)
 def mobile_page():
     """หน้าเว็บสำหรับมือถือ -- ถ่าย/เลือกรูปหลายใบ อัปโหลดทีเดียว แสดงผลทีละใบ"""
-    html_path = STATIC_DIR / "mobile.html"
-    if not html_path.exists():
-        return HTMLResponse("<h1>ไม่พบ static/mobile.html</h1>", status_code=500)
-    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+    return _page("mobile.html")
+
+
+@app.get("/summary", response_class=HTMLResponse)
+def summary_page():
+    """หน้าสรุปยอดรายเดือน/รายปี (กราฟ) -- ดึงตัวเลขจาก /api/summary"""
+    return _page("summary.html")
+
+
+def _page(name: str):
+    p = STATIC_DIR / name
+    if not p.exists():
+        return HTMLResponse(f"<h1>ไม่พบ static/{name}</h1>", status_code=500)
+    return HTMLResponse(p.read_text(encoding="utf-8"))
+
+
+# ══════════════════════════════════════════════
+# ฐานข้อมูล: บันทึกใบที่ตรวจแล้ว + สรุปยอด
+# ══════════════════════════════════════════════
+
+@app.post("/invoices")
+def save_invoice(payload: dict = Body(...)):
+    """
+    บันทึกใบที่ผู้ใช้ตรวจ/แก้แล้วลงฐานข้อมูล (กดปุ่ม "บันทึก" ในหน้าตรวจ)
+    payload: {"filename":..., "fields": {...}, "items": [...], "flags": [...]}
+    """
+    if not isinstance(payload.get("fields"), dict):
+        raise HTTPException(400, detail="payload ต้องมี fields")
+    try:
+        return store.save_invoice(payload)
+    except Exception as e:
+        raise HTTPException(500, detail=f"บันทึกไม่สำเร็จ: {e}")
+
+
+@app.get("/api/summary")
+def api_summary():
+    """ยอดรวมรายเดือน + รายปี สำหรับหน้ากราฟ"""
+    return store.summary()
+
+
+@app.get("/api/invoices")
+def api_invoices(limit: int = 500):
+    """รายการใบที่บันทึกไว้ (ล่าสุดก่อน)"""
+    return {"invoices": store.list_invoices(limit)}
 
 
 if __name__ == "__main__":

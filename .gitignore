@@ -10,6 +10,9 @@ __pycache__/
 models/
 dataset/models/
 
+# Saved-invoice database (holds real invoice contents — keep local only)
+data/
+
 # Raw / derived invoice scans (real business documents — keep local only)
 dataset/raw/
 dataset/augmented/
