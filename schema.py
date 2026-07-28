@@ -55,6 +55,16 @@ LABELS = {
     "amount":         "ราคารวม",
 }
 
+# label เฉพาะของคอลัมน์ในตารางสินค้า -- ชื่อซ้ำกับ LABELS ระดับใบไม่ได้ เพราะ
+# "discount" ระดับใบคือส่วนลดรวมทั้งบิล แต่ระดับรายการคือส่วนลดของบรรทัดนั้น
+ITEM_LABELS = {
+    "description": "รายการ",
+    "quantity":    "จำนวน",
+    "unit_price":  "ราคา/หน่วย",
+    "discount":    "ส่วนลด",
+    "amount":      "ราคารวม",
+}
+
 # ── การจัดกลุ่ม field สำหรับ UI review (data-driven) ──
 UI_GROUPS = [
     {"title": "เอกสาร",        "fields": ["invoice_number", "invoice_date"]},
