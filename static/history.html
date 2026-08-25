@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ประวัติใบกำกับภาษี</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #ffffff; --surface: #ffffff; --surface-2: #f8fafc; --surface-3: #f1f4f8;
+    --text: #10131a; --text-2: #3c4453; --muted: #6b7280;
+    --border: #e8ebf0; --input-bg: #ffffff; --input-border: #ccd1db;
+    --blue: #0b5fff; --blue-hover: #0a4fd6; --blue-soft: #e9f0ff; --on-blue: #ffffff;
+    --green: #12a35f; --green-soft: #e6f7ef;
+    --amber: #b45309; --amber-soft: #fef3c7;
+    --red: #e5352b; --red-soft: #fdecea;
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+    --shadow-md: 0 4px 14px rgba(16,24,40,.08);
+    --r: 14px; --r-sm: 11px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Leelawadee UI", "Noto Sans Thai", "IBM Plex Sans Thai", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.5;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 16px 60px; }
+  .page-head { padding: 22px 0 16px; display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .page-head h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 3px; letter-spacing: -.02em; }
+  .page-head p { margin: 0; color: var(--muted); font-size: 0.86rem; }
+  .page-head .spacer { flex: 1; }
+
+  .btn {
+    font-family: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    border-radius: var(--r-sm); padding: 10px 16px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-2); text-decoration: none; display: inline-block;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn-primary { background: var(--blue); color: var(--on-blue); border-color: var(--blue); }
+  .btn-primary:hover:not(:disabled) { background: var(--blue-hover); color: var(--on-blue); }
+  .btn-sm { padding: 7px 13px; font-size: 0.8rem; }
+
+  .empty { text-align: center; color: var(--muted); font-size: 0.88rem; padding: 60px 16px; }
+
+  /* ── กริดการ์ด ── */
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+    box-shadow: var(--shadow); overflow: hidden; cursor: pointer; text-align: left;
+    font-family: inherit; color: inherit; padding: 0; transition: border-color .15s, box-shadow .15s, transform .12s;
+  }
+  .card:hover { border-color: var(--blue); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .thumb { aspect-ratio: 4/3; background: var(--surface-3); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb .noimg { color: var(--muted); font-size: 0.72rem; text-align: center; padding: 10px; }
+  .card-body { padding: 10px 12px 12px; }
+  .card-name { font-size: 0.88rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-meta { font-size: 0.76rem; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-amt { font-size: 0.95rem; font-weight: 700; margin-top: 6px; letter-spacing: -.01em; }
+
+  /* ── หน้ารายละเอียด (เต็มจอ) ── */
+  .detail { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: none; }
+  .detail.show { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+  .detail-head { display: flex; align-items: center; gap: 8px; padding: 9px 14px; flex-wrap: wrap; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .detail-head .title { font-weight: 700; font-size: 1rem; }
+  .detail-head .spacer { flex: 1; }
+
+  .detail-body { display: grid; grid-template-columns: minmax(0, 1fr) clamp(380px, 34%, 560px); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+  /* บนจอแคบ: รูปแยกออกจาก grid มาเป็นลูกโป่งลอยได้ (เหมือนหน้าหลัก /) แทนแบ่งจอ
+     40vh ตายตัว -- ให้ฟอร์มแก้ไขเต็มจอ แล้วชะโงกดูรูปเฉพาะตอนจำเป็น */
+  @media (max-width: 900px) { .detail-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); position: relative; } }
+  .detail-img { position: relative; overflow: auto; background: var(--surface-3); display: flex; min-height: 0; }
+  .detail-img img { margin: auto; max-width: 100%; max-height: 100%; object-fit: contain; display: block; cursor: zoom-in; }
+  .detail-img.zoom img { max-width: none; max-height: none; width: 190%; cursor: zoom-out; }
+  .detail-img .noimg { margin: auto; color: var(--muted); font-size: 0.85rem; text-align: center; padding: 20px; }
+
+  .imgtools { position: absolute; top: 10px; right: 10px; display: flex; gap: 7px; z-index: 2; }
+  .imgtools button {
+    width: 40px; height: 40px; border-radius: 50%; padding: 0; cursor: pointer; border: none;
+    background: rgba(15,23,42,.78); color: #fff; display: grid; place-items: center;
+  }
+  .imgtools button:hover { background: rgba(15,23,42,.95); }
+  .imgtools svg { width: 19px; height: 19px; }
+  @media (min-width: 901px) { #btnImgClose { display: none; } }
+
+  .img-backdrop { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 185; }
+  .img-backdrop.show { display: block; }
+  @media (max-width: 900px) {
+    .detail-img {
+      position: fixed; right: 16px; bottom: 20px; left: auto; top: auto;
+      width: 88px; height: 88px; border-radius: 50%; z-index: 190; margin: 0;
+      box-shadow: var(--shadow-md); border: 2.5px solid var(--surface);
+      touch-action: none; cursor: grab; overflow: hidden;
+    }
+    .detail-img:active { cursor: grabbing; }
+    .detail-img:not(.expanded) img { object-fit: cover; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+    .detail-img:not(.expanded) .noimg { position: absolute; inset: 0; display: flex; padding: 4px; font-size: 0.55rem; }
+    .detail-img:not(.expanded)::after {
+      content: '⤢'; position: absolute; bottom: -1px; right: -1px; width: 24px; height: 24px;
+      border-radius: 50%; background: var(--blue); color: #fff; font-size: 12px; line-height: 1;
+      display: grid; place-items: center; box-shadow: var(--shadow); pointer-events: none;
+    }
+    .detail-img.expanded {
+      inset: 7vh 4vw; width: auto; height: auto; border-radius: var(--r);
+      cursor: default; touch-action: auto; overflow: auto;
+    }
+    .imgtools { display: none; }
+    .detail-img.expanded .imgtools { display: flex; }
+  }
+
+  .detail-form { overflow-y: auto; padding: 14px 18px 44px; border-left: 1px solid var(--border); background: var(--surface); }
+  @media (max-width: 900px) { .detail-form { border-left: none; border-top: 1px solid var(--border); } }
+  .group-title { font-size: 0.73rem; font-weight: 700; color: var(--muted); margin: 16px 0 7px; letter-spacing: .04em; }
+  .group-title:first-child { margin-top: 0; }
+  .row { display: flex; gap: 10px; padding: 3px 0; align-items: center; }
+  .row .label { flex: 0 0 106px; font-size: 0.78rem; color: var(--muted); }
+  .row .field { flex: 1; min-width: 0; }
+  .row input, table.items input {
+    width: 100%; font-size: 0.88rem; font-family: inherit; color: var(--text);
+    background: var(--input-bg); border: 1px solid var(--input-border);
+    border-radius: 9px; padding: 8px 10px; min-width: 0; transition: border-color .12s, box-shadow .12s;
+  }
+  .row input:hover, table.items input:hover { border-color: var(--blue); }
+  .row input:focus, table.items input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+
+  .items-title { font-size: 0.73rem; color: var(--muted); font-weight: 700; margin: 16px 0 7px; letter-spacing: .04em; }
+  .items-scroll { overflow-x: auto; }
+  table.items { width: 100%; border-collapse: separate; border-spacing: 0 5px; font-size: 0.82rem; }
+  table.items th { color: var(--muted); font-weight: 600; font-size: 0.71rem; white-space: nowrap; padding: 0 4px 2px; text-align: left; }
+  table.items td { padding: 0 3px; }
+  table.items input { font-size: 0.8rem; padding: 6px 8px; min-width: 74px; }
+  table.items input[data-key="description"] { min-width: 190px; }
+
+  .save-bar { position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 12px 0 0; margin-top: 16px; }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: #10131a; color: #fff; padding: 10px 18px; border-radius: 999px;
+    font-size: 0.85rem; z-index: 300; opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>ประวัติใบกำกับภาษี</h1>
+      <p id="sub">ใบที่บันทึกไว้ทั้งหมด — เปิดดูรูปจริงและแก้ไขย้อนหลังได้</p>
+    </div>
+    <div class="spacer"></div>
+    <a class="btn" href="/">← กลับหน้าสกัดข้อมูล</a>
+  </div>
+
+  <div id="listBox"></div>
+</div>
+
+<div class="detail" id="detail">
+  <div class="detail-head">
+    <button class="btn btn-sm" id="btnBack">← กลับ</button>
+    <div class="title" id="detailTitle"></div>
+    <div class="spacer"></div>
+    <button class="btn btn-sm" id="btnDel" style="color:var(--red)">ลบ</button>
+    <button class="btn btn-sm btn-primary" id="btnSave" disabled>บันทึกการแก้ไข</button>
+  </div>
+  <div class="detail-body">
+    <div class="img-backdrop" id="imgBackdrop"></div>
+    <div class="detail-img" id="detailImgBox">
+      <div class="imgtools">
+        <button id="btnImgClose" title="ย่อกลับ" aria-label="ย่อกลับ">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <button id="btnZoom" title="ซูมเข้า/ออก" aria-label="ซูมเข้า/ออก">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        </button>
+      </div>
+      <img id="detailImg" alt="" draggable="false" style="display:none">
+      <div class="noimg" id="noImgMsg" style="display:none">— ไม่มีรูปเก็บไว้สำหรับใบนี้ —<br>(บันทึกไว้ก่อนมีหน้าประวัติ)</div>
+    </div>
+    <div class="detail-form" id="detailForm"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let META = null;
+let invoices = [];
+let curId = null, curData = null, savedJson = '';
+const detailImgBox = $('detailImgBox'), detailImg = $('detailImg'), imgBackdrop = $('imgBackdrop');
+
+fetch('/meta').then(r => r.json()).then(m => { META = m; }).catch(() => { META = null; });
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+const baht = n => '฿ ' + Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+async function loadList() {
+  const listBox = $('listBox');
+  listBox.innerHTML = '<div class="empty">กำลังโหลด...</div>';
+  let data;
+  try {
+    data = await fetch('/api/invoices').then(r => r.json());
+  } catch (e) {
+    listBox.innerHTML = `<div class="empty">โหลดรายการไม่สำเร็จ: ${esc(e.message)}</div>`;
+    return;
+  }
+  invoices = data.invoices || [];
+  if (!invoices.length) {
+    listBox.innerHTML = '<div class="empty">ยังไม่มีใบที่บันทึกไว้ — กลับไปสกัดและกด "บันทึก" ที่หน้าหลักก่อน</div>';
+    return;
+  }
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  grid.replaceChildren(...invoices.map(inv => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'card';
+    const thumb = inv.has_image
+      ? `<img src="/api/invoices/${inv.id}/image" alt="" loading="lazy">`
+      : `<div class="noimg">— ไม่มีรูป —<br>(บันทึกไว้ก่อนมีหน้าประวัติ)</div>`;
+    card.innerHTML = `
+      <div class="thumb">${thumb}</div>
+      <div class="card-body">
+        <div class="card-name">${esc(inv.seller_name_th || inv.filename || 'ไม่ทราบชื่อ')}</div>
+        <div class="card-meta">${esc(inv.invoice_date || inv.date_ce || '')}${inv.invoice_number ? ' · เลขที่ ' + esc(inv.invoice_number) : ''}</div>
+        <div class="card-amt">${baht(inv.grand_total)}</div>
+      </div>`;
+    card.addEventListener('click', () => openDetail(inv.id));
+    return card;
+  }));
+  listBox.replaceChildren(grid);
+}
+
+async function openDetail(id) {
+  const detailEl = $('detail');
+  detailEl.classList.add('show');
+  document.body.style.overflow = 'hidden';
+  $('detailTitle').textContent = 'กำลังโหลด...';
+  $('detailForm').innerHTML = '';
+  $('btnSave').disabled = true;
+  collapseBubble();   // ใบใหม่เริ่มที่ลูกโป่งเล็กเสมอ (ไม่ค้างขยาย/ซูมจากใบก่อนหน้า)
+
+  let rec;
+  try {
+    rec = await fetch(`/api/invoices/${id}`).then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    });
+  } catch (e) {
+    $('detailTitle').textContent = 'โหลดไม่สำเร็จ';
+    $('detailForm').innerHTML = `<div class="empty">เปิดใบนี้ไม่สำเร็จ: ${esc(e.message)}</div>`;
+    return;
+  }
+
+  curId = id;
+  curData = rec;
+  $('detailTitle').textContent = (rec.seller_name_th || rec.filename || 'ไม่ทราบชื่อ') + ` (#${id})`;
+
+  if (rec.has_image) {
+    detailImg.src = `/api/invoices/${id}/image`;
+    detailImg.style.display = '';
+    $('noImgMsg').style.display = 'none';
+  } else {
+    detailImg.removeAttribute('src');
+    detailImg.style.display = 'none';
+    $('noImgMsg').style.display = '';
+  }
+
+  await buildForm(rec);
+  savedJson = JSON.stringify(collect());
+  $('btnSave').disabled = true;
+}
+
+async function buildForm(rec) {
+  if (!META) { try { META = await fetch('/meta').then(r => r.json()); } catch { META = null; } }
+  const form = $('detailForm');
+  form.innerHTML = '';
+  const f = { ...rec };
+  const summaryKeys = new Set((META?.summary_fields || []).map(x => x.key));
+  let itemsPlaced = false;
+
+  for (const g of META?.ui_groups || []) {
+    if (!itemsPlaced && g.fields.some(x => summaryKeys.has(x.key))) {
+      form.appendChild(buildItemsTable(rec.items || []));
+      itemsPlaced = true;
+    }
+    const t = document.createElement('div');
+    t.className = 'group-title';
+    t.textContent = g.title;
+    form.appendChild(t);
+    for (const fld of g.fields) form.appendChild(buildRow(fld, f[fld.key] ?? ''));
+  }
+  if (!itemsPlaced) form.appendChild(buildItemsTable(rec.items || []));
+
+  form.addEventListener('input', () => {
+    $('btnSave').disabled = JSON.stringify(collect()) === savedJson;
+  });
+}
+
+function buildRow(fld, value) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<span class="label">${esc(fld.label)}</span>
+    <span class="field"><input data-key="${esc(fld.key)}" value="${esc(value)}"></span>`;
+  return row;
+}
+
+function buildItemsTable(items) {
+  const box = document.createElement('div');
+  const cols = META?.item_fields || [];
+  if (!items.length || !cols.length) {
+    box.innerHTML = '<div class="items-title">รายการสินค้า</div>' +
+      '<div style="font-size:0.8rem;color:var(--muted);">— ไม่พบรายการสินค้าในใบนี้ —</div>';
+    return box;
+  }
+  box.innerHTML = '<div class="items-title">รายการสินค้า</div><div class="items-scroll">' +
+    '<table class="items"><thead><tr><th>#</th>' +
+    cols.map(c => `<th>${esc(c.label)}</th>`).join('') + '</tr></thead><tbody>' +
+    items.map((it, r) => `<tr><td style="color:var(--muted);font-size:0.72rem;">${r + 1}</td>` +
+      cols.map(c => `<td><input data-item-row="${r}" data-key="${esc(c.key)}" value="${esc(it[c.key] ?? '')}"></td>`).join('') +
+      '</tr>').join('') +
+    '</tbody></table></div>';
+  return box;
+}
+
+function collect() {
+  const form = $('detailForm');
+  const fields = {};
+  form.querySelectorAll('input[data-key]:not([data-item-row])').forEach(i => { fields[i.dataset.key] = i.value; });
+  const rows = {};
+  form.querySelectorAll('input[data-item-row]').forEach(i => {
+    const r = i.dataset.itemRow;
+    (rows[r] = rows[r] || {})[i.dataset.key] = i.value;
+  });
+  const items = Object.keys(rows).sort((a, b) => a - b).map(k => rows[k]);
+  return { fields, items };
+}
+
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+$('btnSave').addEventListener('click', async () => {
+  if (!curId) return;
+  const body = collect();
+  $('btnSave').disabled = true;
+  $('btnSave').textContent = 'กำลังบันทึก...';
+  try {
+    const r = await fetch(`/api/invoices/${curId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
+    savedJson = JSON.stringify(collect());
+    showToast('บันทึกการแก้ไขแล้ว');
+    loadList();   // รีเฟรชการ์ดในลิสต์ให้ตัวเลข/ชื่อที่แก้ใหม่ตรงกัน
+  } catch (e) {
+    await new Promise(res => { showToast(`บันทึกไม่สำเร็จ: ${e.message}`); setTimeout(res, 100); });
+  }
+  $('btnSave').textContent = 'บันทึกการแก้ไข';
+});
+
+function closeDetail() {
+  $('detail').classList.remove('show');
+  document.body.style.overflow = '';
+  curId = null; curData = null;
+  collapseBubble();
+}
+$('btnBack').addEventListener('click', closeDetail);
+
+$('btnDel').addEventListener('click', async () => {
+  if (!curId) return;
+  const name = curData?.seller_name_th || curData?.filename || `ใบเลขที่ ${curId}`;
+  if (!confirm(`ลบ "${name}" ทิ้งถาวร?\nกู้คืนไม่ได้ ยอดสรุปรายเดือน/รายปีจะไม่นับใบนี้อีกต่อไป`)) return;
+  $('btnDel').disabled = true;
+  try {
+    const r = await fetch(`/api/invoices/${curId}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
+    closeDetail();
+    showToast('ลบแล้ว');
+    loadList();
+  } catch (e) {
+    showToast(`ลบไม่สำเร็จ: ${e.message}`);
+    $('btnDel').disabled = false;
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('detail').classList.contains('show')) closeDetail();
+});
+
+// ══════════════════════════════════════════════════════════
+// ลูกโป่งรูปลอย (จอแคบเท่านั้น) -- เหมือนหน้าหลัก (/) ทุกอย่าง: ลากขยับตำแหน่งได้,
+// แตะเพื่อขยายเต็มจอ, แตะซ้ำเพื่อซูมเข้า/ออก, ปิดกลับด้วยปุ่ม X หรือแตะฉากหลัง
+// ══════════════════════════════════════════════════════════
+function isMobileBubble() { return window.matchMedia('(max-width: 900px)').matches; }
+
+function clearDragPosition() {
+  detailImgBox.style.left = detailImgBox.style.top =
+    detailImgBox.style.right = detailImgBox.style.bottom = '';
+}
+function expandBubble() {
+  if (!isMobileBubble()) return;
+  clearDragPosition();
+  detailImgBox.classList.add('expanded');
+  imgBackdrop.classList.add('show');
+}
+function collapseBubble() {
+  clearDragPosition();
+  detailImgBox.classList.remove('expanded', 'zoom');
+  imgBackdrop.classList.remove('show');
+}
+function toggleZoom() {
+  const zoomed = detailImgBox.classList.toggle('zoom');
+  if (zoomed) {
+    requestAnimationFrame(() => {
+      detailImgBox.scrollLeft = (detailImgBox.scrollWidth - detailImgBox.clientWidth) / 2;
+      detailImgBox.scrollTop = 0;
+    });
+  }
+}
+$('btnImgClose').addEventListener('click', e => { e.stopPropagation(); collapseBubble(); });
+$('btnZoom').addEventListener('click', e => { e.stopPropagation(); toggleZoom(); });
+imgBackdrop.addEventListener('click', collapseBubble);
+
+// เดสก์ท็อป (ไม่มีลูกโป่ง) เท่านั้น -- บนมือถือ pointerdown/pointerup ด้านล่างจัดการเอง
+detailImg.addEventListener('click', () => {
+  if (isMobileBubble()) return;
+  toggleZoom();
+});
+
+// ลาก/แตะ ตัดสินใจในจุดเดียว (ไม่พึ่ง click event แยก) -- setPointerCapture() ทำให้
+// เบราว์เซอร์ไม่ยิง click event ให้บางจังหวะ ถ้าแยกตรรกะจะมีโอกาสซูมค้าง/ไม่ทำงาน
+let dragging = false, dragMoved = false, dragWasExpanded = false;
+let dragStartX = 0, dragStartY = 0, dragOrigLeft = 0, dragOrigTop = 0;
+
+detailImgBox.addEventListener('pointerdown', e => {
+  if (!isMobileBubble()) return;
+  if (e.target.closest('.imgtools')) return;
+  dragging = true;
+  dragMoved = false;
+  dragWasExpanded = detailImgBox.classList.contains('expanded');
+  const r = detailImgBox.getBoundingClientRect();
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragOrigLeft = r.left;
+  dragOrigTop = r.top;
+  if (!dragWasExpanded) detailImgBox.setPointerCapture(e.pointerId);
+});
+detailImgBox.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const dx = e.clientX - dragStartX, dy = e.clientY - dragStartY;
+  if (Math.abs(dx) > 6 || Math.abs(dy) > 6) dragMoved = true;
+  if (!dragMoved || dragWasExpanded) return;
+  const w = detailImgBox.offsetWidth, h = detailImgBox.offsetHeight;
+  const nl = Math.max(4, Math.min(window.innerWidth - w - 4, dragOrigLeft + dx));
+  const nt = Math.max(4, Math.min(window.innerHeight - h - 4, dragOrigTop + dy));
+  detailImgBox.style.left = nl + 'px';
+  detailImgBox.style.top = nt + 'px';
+  detailImgBox.style.right = 'auto';
+  detailImgBox.style.bottom = 'auto';
+});
+detailImgBox.addEventListener('pointerup', () => {
+  if (!dragging) return;
+  dragging = false;
+  if (dragMoved) return;
+  if (dragWasExpanded) toggleZoom(); else expandBubble();
+});
+
+loadList();
+</script>
+</body>
+</html>

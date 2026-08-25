@@ -83,11 +83,29 @@ def load_master(side: str) -> dict:
 
 def save_entry(side: str, norm_name: str, name_th: str, name_en: str,
               tax_id: str, address: str) -> None:
-    """บันทึก/อัปเดตข้อมูลที่ผู้ใช้ยืนยันแล้ว -- ค่าล่าสุดชนะเสมอ (คนตรวจแล้ว)"""
+    """บันทึก/อัปเดตข้อมูลที่ผู้ใช้ยืนยันแล้ว -- ค่าล่าสุดชนะเสมอ (คนตรวจแล้ว)
+
+    ยกเว้นกรณีเดียว: ของเดิมในตาราง valid อยู่แล้ว (13 หลัก ผ่าน checksum) แต่ tax_id
+    ใหม่ที่จะบันทึกไม่ valid (ไม่ว่าจะ empty/malformed/checksum ไม่ผ่าน/หรือแม้แต่
+    "legacy" 10 หลัก) -- ไม่ทับ คงเลขเดิมไว้ กันเหตุการณ์จริงที่เคยเกิด: พนักงานตรวจใบ
+    ไวไม่ทันสังเกตว่าโมเดลอ่านเลขภาษีผิด กด "บันทึก" แล้วเลขผิดๆ นั้นเข้าไปแทนที่เลข
+    ที่ถูกต้องอยู่แล้วถาวร (พบจริงกับ นิวกู๊ดเฮง 999: ของเดิม valid 0733550001529
+    ถูกทับด้วยเลขปลอม 3032825449 -- ตัวนี้ยังผ่านเช็คแบบเดิมเพราะ 10 หลักถูกจัดเป็น
+    "legacy" ไม่ใช่ "checksum พัง" ทั้งที่จริงคือเลขอ่านผิด ไม่ใช่เลขยุคเก่าจริง --
+    จึงต้องกันทุกสถานะที่ไม่ใช่ "valid" ไม่ใช่กันแค่ malformed/checksum)"""
     if not norm_name:
         return
     conn = _connect()
     try:
+        if tax_id:
+            from postprocess import thai_tax_id_status  # lazy import กัน circular import
+            existing = conn.execute(
+                "SELECT tax_id FROM master_entries WHERE side = ? AND norm_name = ?",
+                (side, norm_name)).fetchone()
+            if (existing and existing[0]
+                    and thai_tax_id_status(tax_id) != "valid"
+                    and thai_tax_id_status(existing[0]) == "valid"):
+                tax_id = existing[0]
         conn.execute("""
             INSERT INTO master_entries (side, norm_name, name_th, name_en, tax_id, address, source, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, 'verified', ?)

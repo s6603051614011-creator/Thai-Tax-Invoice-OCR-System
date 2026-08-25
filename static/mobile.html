@@ -39,7 +39,7 @@
      ใบสุดท้ายในลิสต์โดนแถบทับบางส่วน -- 150px คือ fallback ตอนยังวัดไม่ได้/ไม่โชว์แถบ */
   .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px calc(var(--bottombar-h, 150px) + 20px); }
 
-  .page-head { padding: 22px 0 16px; display: flex; align-items: flex-start; gap: 12px; }
+  .page-head { padding: 22px 0 16px; display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
   .page-head a.btn { flex: 0 0 auto; text-decoration: none; }
   .page-head h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 3px; letter-spacing: -.02em; }
   .page-head p { margin: 0; color: var(--muted); font-size: 0.86rem; }
@@ -267,7 +267,10 @@
     display: grid; grid-template-columns: minmax(0, 1fr) clamp(420px, 36%, 640px);
     grid-template-rows: minmax(0, 1fr); overflow: hidden;
   }
-  @media (max-width: 900px) { .detail-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 44vh minmax(0, 1fr); } }
+  /* บนจอแคบ: รูปแยกออกจาก grid มาเป็น "ลูกโป่ง" ลอยได้ ลากขยับได้ แตะเพื่อขยาย --
+     เดิม 44vh ตายตัวแบ่งพื้นที่ฟอร์มครึ่งจอทิ้งไปเปล่าๆ ทั้งที่ผู้ใช้ส่วนใหญ่อยาก
+     เห็นฟอร์มเต็มจอแล้วชะโงกดูรูปเฉพาะตอนจำเป็น (ดู JS: isMobileBubble/expandBubble) */
+  @media (max-width: 900px) { .detail-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); position: relative; } }
 
   .detail-img { position: relative; overflow: auto; background: var(--surface-3); display: flex; min-height: 0; }
   /* จัดกึ่งกลางด้วย margin:auto ไม่ใช่ align-items/justify-content:center --
@@ -284,6 +287,39 @@
   }
   .imgtools button:hover { background: rgba(15,23,42,.95); }
   .imgtools svg { width: 19px; height: 19px; }
+  /* ปุ่มปิด (X) มีความหมายเฉพาะตอนขยายลูกโป่งบนจอแคบเท่านั้น -- จอกว้างเห็นรูปอยู่แล้วตลอด */
+  @media (min-width: 901px) { #btnImgClose { display: none; } }
+
+  /* ══ ลูกโป่งรูปลอย (เฉพาะจอแคบ) ══ */
+  .img-backdrop { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 185; }
+  .img-backdrop.show { display: block; }
+  @media (max-width: 900px) {
+    .detail-form { height: 100%; padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+    .detail-img {
+      position: fixed; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); left: auto; top: auto;
+      width: 88px; height: 88px; border-radius: 50%; z-index: 190; margin: 0;
+      box-shadow: var(--shadow-md); border: 2.5px solid var(--surface);
+      touch-action: none; cursor: grab; overflow: hidden;
+    }
+    .detail-img:active { cursor: grabbing; }
+    .detail-img:not(.expanded) img { object-fit: cover; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+    /* ป้ายเล็กมุมขวาล่างของลูกโป่ง บอกว่าแตะเพื่อขยายได้ */
+    .detail-img:not(.expanded)::after {
+      content: '⤢'; position: absolute; bottom: -1px; right: -1px; width: 24px; height: 24px;
+      border-radius: 50%; background: var(--blue); color: #fff; font-size: 12px; line-height: 1;
+      display: grid; place-items: center; box-shadow: var(--shadow); pointer-events: none;
+    }
+    .detail-img.expanded {
+      inset: 7vh 4vw; width: auto; height: auto; border-radius: var(--r);
+      cursor: default; touch-action: auto;
+      /* ลูกโป่งตอนย่อ (บรรทัด overflow:hidden ด้านบน) ตัดขอบให้เป็นวงกลม แต่ถ้าไม่
+         เปิดกลับเป็น auto ตอนขยาย จะซูมแล้วเลื่อนดูรอบใบไม่ได้เลย (ภาพถูกครอบตายตัว) --
+         นี่คือบั๊กที่ทีมเจอ: "ซูมแล้วเลื่อนดูรายละเอียดให้ทั่วใบไม่ได้" */
+      overflow: auto;
+    }
+    .imgtools { display: none; }
+    .detail-img.expanded .imgtools { display: flex; }
+  }
 
   .detail-form { overflow-y: auto; padding: 14px 18px 44px; border-left: 1px solid var(--border); background: var(--surface); }
   @media (max-width: 900px) { .detail-form { border-left: none; border-top: 1px solid var(--border); } }
@@ -306,6 +342,10 @@
   input.bad { background: var(--red-soft); border-color: var(--red); }
   input.bad:focus { box-shadow: 0 0 0 3px rgba(229,53,43,.15); }
   .src-badge { flex: 0 0 auto; font-size: 0.65rem; padding: 2px 8px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); cursor: help; white-space: nowrap; font-weight: 600; }
+  /* ต่างจาก .src-badge ปกติ (ฟ้า = "เติมค่าจากตารางให้แล้ว") -- อันนี้คือ "โมเดลอ่านเอง
+     ไม่ว่าง แต่ไม่ตรงกับตาราง" ค่าที่เห็นในช่องยังเป็นของโมเดล ไม่ใช่ของตาราง ต้องแยกสี/
+     คำให้ชัด ไม่งั้นดูเหมือนตารางเติมค่าผิดให้ ทั้งที่จริงโมเดลอ่านผิดเอง (บั๊กที่เจอจริง) */
+  .src-badge.notice { background: var(--amber-soft); color: var(--amber); }
   /* ป้ายบอกว่าช่องนี้ตรงกับฐานข้อมูลคู่ค้าไหม -- มาจาก master_list_match ที่ /ocr
      ส่งมาทุกใบ (ไม่ใช่เฉพาะตอนมีปัญหาแบบ flags) ให้รู้ว่าช่องไหนเชื่อได้เลย */
   .db-badge { flex: 0 0 auto; font-size: 0.65rem; padding: 2px 8px; border-radius: 999px; cursor: help; white-space: nowrap; font-weight: 600; }
@@ -336,10 +376,11 @@
       <h1 id="pageTitle">รายการใบกำกับภาษี</h1>
       <p id="pageSub">สกัดข้อมูลและตรวจสอบอัตโนมัติ</p>
     </div>
-    <!-- เปิดแท็บใหม่ (ไม่ใช่ navigate ทับ) -- /summary เป็นคนละหน้า HTML แยกกัน
-         การ navigate ทับจะล้าง state ของรายการที่สกัดแล้วแต่ยังไม่ได้บันทึก
-         (อยู่ใน JS memory ล้วนๆ) ทิ้งทั้งหมด กด "กลับ" มาก็เจอหน้าเปล่า -->
-    <a class="btn btn-sm" href="/summary" target="_blank" rel="noopener">สรุปยอด →</a>
+    <!-- navigate ทับตามปกติได้แล้ว (ไม่ต้องเปิดแท็บใหม่) -- รายการที่สกัดแล้วแต่ยัง
+         ไม่ได้บันทึกถูกสำรองไว้ใน IndexedDB ทุกครั้งที่เปลี่ยน (ดู persistState())
+         กลับมาหน้านี้แล้วจะโหลดคืนอัตโนมัติ ไม่หายอีกต่อไป -->
+    <a class="btn btn-sm" href="/history">ประวัติ →</a>
+    <a class="btn btn-sm" href="/summary">สรุปยอด →</a>
   </div>
 
   <div class="done-banner" id="doneBanner">สกัดข้อมูลครบทุกรายการแล้ว ✓</div>
@@ -484,8 +525,13 @@
     <button class="btn btn-sm btn-primary" id="btnSave" disabled>บันทึก</button>
   </div>
   <div class="detail-body">
+    <div class="img-backdrop" id="imgBackdrop"></div>
     <div class="detail-img" id="detailImgBox">
       <div class="imgtools">
+        <!-- มีความหมายเฉพาะตอนจอแคบ+ขยายลูกโป่งเต็มจอ (ดู CSS @media 900px) -- ปิดกลับไปเป็นลูกโป่งเล็ก -->
+        <button id="btnImgClose" title="ย่อกลับ" aria-label="ย่อกลับ">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
         <button id="btnZoom" title="ซูมเข้า/ออก" aria-label="ซูมเข้า/ออก">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
         </button>
@@ -493,7 +539,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 4 21 10 15 10"/></svg>
         </button>
       </div>
-      <img id="detailImg" alt="">
+      <img id="detailImg" alt="" draggable="false">
     </div>
     <div class="detail-form" id="detailForm"></div>
   </div>
@@ -512,6 +558,8 @@ const RECS = [];
 let downloaded = true;
 let curIdx = -1;
 let doneThisRun = 0, totalThisRun = 0;
+let currentAbort = null;   // AbortController ของคำขอ /ocr ที่กำลังค้างอยู่ตอนนี้ (ถ้ามี)
+let inFlightFile = null;   // ไฟล์ที่กำลังยิง /ocr อยู่ตอนนี้ (ไม่อยู่ใน queue แล้วเพราะ shift() ออกไปแล้ว)
 
 const $ = id => document.getElementById(id);
 const rowsEl = $('rows'), progressCard = $('progressCard'), doneBanner = $('doneBanner');
@@ -531,6 +579,110 @@ const detailForm = $('detailForm'), detailTitle = $('detailTitle'), detailMeta =
 let metaReady = loadMeta();
 function loadMeta() {
   return fetch('/meta').then(r => r.json()).then(m => { META = m; }).catch(() => { META = null; });
+}
+
+// ══════════════════════════════════════════════════════════
+// สำรองรายการที่สกัดแล้ว (ยังไม่ได้บันทึกลง server ก็ได้) ไว้ใน IndexedDB
+// -- เดิมอยู่ใน JS memory ล้วนๆ พอกด "สรุปยอด" (navigate ทับหน้า) แล้วกลับมา
+// หายหมด ต้องอัปโหลดใหม่ทั้งหมด เก็บลง IndexedDB (ไม่ใช่ localStorage เพราะ
+// เก็บรูปถ่าย (Blob) หลายใบพร้อมกันได้เกิน 5-10MB ที่ localStorage จำกัดไว้)
+// ทุกครั้งที่สถานะเปลี่ยน (สกัดเสร็จ/แก้ไข/บันทึก/ลบ/หมุนรูป) แล้วโหลดคืนตอนเปิดหน้า
+// ══════════════════════════════════════════════════════════
+const IDB_NAME = 'invoice_ocr_session', IDB_STORE = 'state', IDB_KEY = 'session';
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbSave(value) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, IDB_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbLoad() {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+let persistTimer = null;
+function snapshotItems() {
+  return ordered().map(rec => ({
+    no: rec.no,
+    data: rec.data,               // ผลดิบจาก /ocr (badge/flags ตอนสกัดครั้งแรก)
+    savedJson: rec.savedJson,      // snapshot ล่าสุดตอน "บันทึก" (หรือค่าดิบถ้ายังไม่เคยบันทึก)
+    saved: rec.saved,
+    rotation: rec.rotation || 0,
+    formFields: collect(rec).fields,   // ค่าปัจจุบันในฟอร์ม (รวมที่ผู้ใช้แก้ไข)
+    formItems: collect(rec).items,
+    fileBlob: rec.file,             // File เป็น Blob subclass -- IndexedDB เก็บได้ตรงๆ
+  }));
+}
+/** ใบที่ "ยังไม่เสร็จ" ตอนนี้ -- ทั้งที่รอคิวอยู่ (queue) และใบที่กำลังยิง /ocr ค้างอยู่
+    (inFlightFile) เผื่อออกจากหน้ากลางคันตอนกำลังสกัด คำขอ /ocr ที่ค้างอยู่จะถูก
+    เบราว์เซอร์ตัดทิ้งไปเลย (navigate ทับหน้า = ยกเลิกคำขอเครือข่ายทั้งหมดอัตโนมัติ)
+    ถ้าไม่จำไฟล์พวกนี้ไว้แยกจาก RECS ก็จะหายไปเงียบๆ ต้องอัปโหลดใหม่ */
+function snapshotPending() {
+  const files = queue.map(q => q.file);
+  if (inFlightFile) files.unshift(inFlightFile);
+  return files;
+}
+/** เขียนลง IndexedDB ทันที ไม่ debounce -- ใช้ตอนจังหวะสำคัญ (เริ่ม/จบอ่านใบ)
+    ที่พลาดไม่ได้แม้จะออกจากหน้าไปทันทีหลังจากนั้นก็ตาม */
+function persistStateNow() {
+  clearTimeout(persistTimer);
+  idbSave({ seq, items: snapshotItems(), pendingFiles: snapshotPending() })
+    .catch(err => console.warn('สำรองสถานะไม่สำเร็จ', err));
+}
+/** เหมือนกันแต่ debounce 300ms กันยิงถี่เกินตอนพิมพ์แก้ไขฟอร์ม */
+function persistState() {
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(persistStateNow, 300);
+}
+
+/** โหลดคืนตอนเปิดหน้า -- คืนค่าฟอร์ม/ธงต่างๆ ให้ตรงกับตอนก่อนออกจากหน้าเป๊ะ
+    รวมถึงใบที่ยังสกัดไม่เสร็จตอนออกจากหน้าไป -- เข้าคิวใหม่แล้วสกัดต่อให้อัตโนมัติ */
+async function restoreState() {
+  let state;
+  try { state = await idbLoad(); } catch { return; }
+  if (!state) return;
+  const items = state.items || [], pending = state.pendingFiles || [];
+  if (!items.length && !pending.length) return;
+  await metaReady;
+  if (!META) { metaReady = loadMeta(); await metaReady; }
+  seq = state.seq || 0;
+  for (const it of items) {
+    const dataClone = JSON.parse(JSON.stringify(it.data));
+    const rec = makeRecord(it.no, it.fileBlob, dataClone);
+    rec.formEl.querySelectorAll('input[data-key]:not([data-item-row])').forEach(inp => {
+      if (it.formFields && inp.dataset.key in it.formFields) inp.value = it.formFields[inp.dataset.key];
+    });
+    rec.formEl.querySelectorAll('input[data-item-row]').forEach(inp => {
+      const row = it.formItems && it.formItems[inp.dataset.itemRow];
+      if (row && inp.dataset.key in row) inp.value = row[inp.dataset.key];
+    });
+    rec.savedJson = it.savedJson;
+    rec.saved = !!it.saved;
+    rec.rotation = it.rotation || 0;
+    rec.dirty = isDirty(rec);
+    rowsEl.appendChild(rec.rowEl);
+    revalidate(rec);
+  }
+  if (pending.length) addFiles(pending);   // สกัดใบที่ค้างอยู่ต่อให้เอง ไม่ต้องอัปโหลดซ้ำ
 }
 
 const pad3 = n => String(n).padStart(3, '0');
@@ -839,6 +991,7 @@ function addFiles(files) {
     queue.push({ file, rowEl });
   }
   refreshUI();
+  persistStateNow();   // เขียนทันที ไม่ debounce -- เผื่อออกจากหน้าไปก่อน 300ms จะครบ
   run();
 }
 
@@ -862,15 +1015,20 @@ async function run() {
   const times = [];
   while (queue.length && !cancelRequested) {
     const { file, rowEl } = queue.shift();
+    inFlightFile = file;
+    // เขียนทันทีตรงนี้ (ไม่ debounce) -- จังหวะสำคัญที่สุด: ถ้าออกจากหน้าไปเดี๋ยวนี้เลย
+    // เบราว์เซอร์จะตัดคำขอ /ocr ที่กำลังจะยิงทิ้งไปเลย ต้องรู้ไว้ก่อนว่าใบนี้ "ค้างอยู่"
+    persistStateNow();
     totalThisRun = doneThisRun + queue.length + 1;
     setRowActive(rowEl, file);
     updateProgress(times);
 
     const t0 = performance.now();
+    currentAbort = new AbortController();
     try {
       const form = new FormData();
       form.append('file', file);
-      const res = await fetch('/ocr', { method: 'POST', body: form });
+      const res = await fetch('/ocr', { method: 'POST', body: form, signal: currentAbort.signal });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail || `HTTP ${res.status}`);
@@ -879,8 +1037,15 @@ async function run() {
       rowEl.replaceWith(rec.rowEl);
       downloaded = false;
     } catch (e) {
-      rowEl.replaceWith(buildErrorRow(file, e.message));
+      if (e.name === 'AbortError') {
+        rowEl.remove();          // ยกเลิกกลางคัน -- ใบนี้ก็ไม่เอา ไม่ใช่แค่ที่ยังไม่เริ่ม
+      } else {
+        rowEl.replaceWith(buildErrorRow(file, e.message));
+      }
     }
+    currentAbort = null;
+    inFlightFile = null;
+    persistStateNow();   // ใบนี้จบแล้วไม่ว่าจะสำเร็จ/พลาด/ยกเลิก -- เอาออกจาก "ค้างอยู่"
     times.push((performance.now() - t0) / 1000);
     doneThisRun++;
     refreshUI();
@@ -890,13 +1055,25 @@ async function run() {
   if (cancelRequested) {          // ใบที่ยังไม่ได้สกัดถูกเอาออกจากลิสต์
     queue.forEach(q => q.rowEl.remove());
     queue = [];
+    persistStateNow();
   }
   isProcessing = false;
+  $('btnCancel').disabled = false;
+  $('btnCancel').textContent = 'ยกเลิก';
   updateProgress([]);
   refreshUI();
 }
 
-$('btnCancel').addEventListener('click', () => { cancelRequested = true; });
+// เดิมกดแล้วดูเหมือนไม่มีอะไรเกิดขึ้น เพราะแค่ตั้งธง cancelRequested แล้วปล่อยให้คำขอ
+// /ocr ที่กำลังค้างอยู่ (อ่านช้าสุด ~2 นาที) รันจนจบก่อนถึงจะหยุดจริง -- ตอนนี้ยิง
+// abort() ทันทีให้คำขอที่ค้างอยู่หลุดทันที ผู้ใช้เห็นผลทันทีที่กด (server ฝั่ง GPU
+// อาจยังคำนวณต่อจนจบในเบื้องหลัง แต่ฝั่งหน้าเว็บหยุดรอและตัดใบนั้นทิ้งได้เลย)
+$('btnCancel').addEventListener('click', () => {
+  cancelRequested = true;
+  if (currentAbort) currentAbort.abort();
+  $('btnCancel').disabled = true;
+  $('btnCancel').textContent = 'กำลังยกเลิก...';
+});
 
 function updateProgress(times) {
   const total = Math.max(totalThisRun, 1);
@@ -1046,6 +1223,7 @@ function makeRecord(no, file, data) {
     revalidate(rec);
     updateSaveBtn();
     refreshUI();
+    persistState();
   });
 
   RECS.push(rec);
@@ -1090,11 +1268,19 @@ function buildForm(rec, data) {
   }
   if (!itemsPlaced) form.appendChild(buildItemsTable(f.items || []));
 
-  if (fixes.length) {
+  // แยกนับ "fix" (เติมค่าจากตารางให้แล้ว) กับ "notice" (โมเดลอ่านเองแต่ไม่ตรงตาราง)
+  // ต่างหาก -- รวมกันนับก่อนหน้านี้ทำให้ข้อความบอกว่า "เติมจากตาราง" ทั้งที่บางช่อง
+  // ยังเป็นค่าที่โมเดลอ่านเอง (อาจอ่านผิด) ไม่ได้ถูกตารางแก้ให้เลย
+  const realFixes = fixes.filter(x => x.type === 'fix');
+  const notices = fixes.filter(x => x.type === 'notice');
+  if (realFixes.length || notices.length) {
     const note = document.createElement('div');
     note.className = 'ml-note';
+    const parts = [];
     // ไม่ใช้สัญลักษณ์ตัวหายาก -- ฟอนต์ไทยบางตัวเรนเดอร์ ℹ เพี้ยนเป็นสระอี
-    note.textContent = `หมายเหตุ: ${fixes.length} ช่องเติมจากตารางอ้างอิงคู่ค้า (ดูป้าย "ตารางอ้างอิง" ข้างช่อง)`;
+    if (realFixes.length) parts.push(`${realFixes.length} ช่องเติมจากตารางอ้างอิงคู่ค้า (ป้าย "ตารางอ้างอิง" สีฟ้า)`);
+    if (notices.length) parts.push(`${notices.length} ช่องที่โมเดลอ่านเองไม่ตรงกับตารางอ้างอิง (ป้าย "⚠ ต่างจากตารางอ้างอิง" สีเหลือง -- ควรตรวจสอบเอง)`);
+    note.textContent = 'หมายเหตุ: ' + parts.join(' / ');
     form.appendChild(note);
   }
   return form;
@@ -1126,10 +1312,19 @@ function dbBadge(key, match) {
 function buildRow(fld, value, fix, match) {
   const row = document.createElement('div');
   row.className = 'row';
-  // ถ้าช่องนี้ถูกตารางอ้างอิงเติมให้อยู่แล้ว ไม่ต้องขึ้นป้าย "ตรงฐานข้อมูล" ซ้ำอีก
-  const badge = fix
-    ? `<span class="src-badge" title="เติมจากตารางอ้างอิง (${esc(fix.reason || '')}${fix.old ? ', เดิม: ' + esc(fix.old) : ''})">ตารางอ้างอิง</span>`
-    : dbBadge(fld.key, match);
+  let badge;
+  if (fix && fix.type === 'fix') {
+    // ช่องนี้โมเดลตอบว่าง ระบบเลยเติมค่าจากตารางอ้างอิงให้ -- ค่าที่เห็นในช่องตอนนี้
+    // มาจากตารางจริงๆ (เชื่อได้ระดับเดียวกับตารางอ้างอิง)
+    badge = `<span class="src-badge" title="เติมจากตารางอ้างอิง (${esc(fix.reason || '')}${fix.old ? ', เดิม: ' + esc(fix.old) : ''})">ตารางอ้างอิง</span>`;
+  } else if (fix && fix.type === 'notice') {
+    // โมเดลอ่านเองไม่ว่าง แค่ไม่ตรงกับที่เคยบันทึกไว้ -- ค่าที่เห็นในช่องยังเป็นของ
+    // "โมเดลอ่านเอง" (ไม่ได้ถูกแก้ให้) ป้ายต้องแยกจาก .src-badge ปกติชัดๆ ไม่งั้นดูเหมือน
+    // ตารางอ้างอิงเติมค่าผิดให้ ทั้งที่จริงโมเดลอ่านผิดเอง (เคยทำให้ทีมเข้าใจผิดมาแล้วจริง)
+    badge = `<span class="src-badge notice" title="โมเดลอ่านได้: ${esc(fix.model_value || '')}\nตารางอ้างอิงมี: ${esc(fix.master_value || '')}\nค่าในช่องตอนนี้ยังเป็นของโมเดล -- ตรวจสอบว่าอันไหนถูก">⚠ ต่างจากตารางอ้างอิง</span>`;
+  } else {
+    badge = dbBadge(fld.key, match);
+  }
   row.innerHTML = `
     <span class="label">${esc(fld.label)}</span>
     <span class="field"><input data-key="${esc(fld.key)}" value="${esc(value)}">${badge}</span>`;
@@ -1216,6 +1411,7 @@ function renderDetail() {
     (rec.data.elapsed_sec != null ? ` · ${rec.data.elapsed_sec.toFixed(1)} วิ` : '');
   detailImg.alt = rec.file.name;
   detailImgBox.classList.remove('zoom');
+  collapseBubble();   // ใบใหม่เริ่มที่ลูกโป่งเล็กเสมอ (ไม่ค้างเป็นภาพขยายเต็มจอจากใบก่อนหน้า)
   detailImgBox.scrollTop = detailImgBox.scrollLeft = 0;
   showImage(rec);
   detailForm.replaceChildren(rec.formEl);
@@ -1265,7 +1461,12 @@ function changedCount(rec) {
 
 function updateSaveBtn() {
   const rec = ordered()[curIdx];
-  $('btnSave').disabled = !rec || !rec.dirty;
+  // เดิมปุ่มกดได้ต่อเมื่อ rec.dirty (แก้ไขอะไรสักอย่าง) เท่านั้น -- ถ้าโมเดลอ่านถูก
+  // หมดตั้งแต่แรก ไม่มีอะไรต้องแก้ ปุ่มก็ค้าง disabled ตลอดกาล บันทึกลงฐานข้อมูล
+  // ไม่ได้เลยทั้งที่ใบนั้นถูกต้องแล้ว (ทีมเจอปัญหานี้จริง) -- เปลี่ยนเป็น: กดได้
+  // ตราบใดที่ "ยังไม่เคยบันทึกใบนี้" (ไม่ว่าจะแก้ไขหรือไม่) หรือถ้าเคยบันทึกไปแล้ว
+  // ก็กดซ้ำได้อีกเมื่อมีการแก้ไขใหม่เท่านั้น (กันกดบันทึกซ้ำโดยไม่มีอะไรเปลี่ยน)
+  $('btnSave').disabled = !rec || (rec.saved && !rec.dirty);
 }
 
 // กล่องยืนยันแบบ promise -- คืน true ถ้ากดตกลง
@@ -1288,16 +1489,29 @@ $('confirmBack').addEventListener('click', e => { if (e.target === $('confirmBac
 
 $('btnSave').addEventListener('click', async () => {
   const rec = ordered()[curIdx];
-  if (!rec || !rec.dirty) return;
+  if (!rec || (rec.saved && !rec.dirty)) return;
   const n = changedCount(rec);
   const warn = rec.flags.length
     ? `<br><span class="warn">หมายเหตุ: ใบนี้ยังมี ${rec.flags.length} จุดที่ระบบเตือนว่าตัวเลขไม่สมเหตุสมผล</span>`
     : '';
-  const yes = await askConfirm('ยืนยันการแก้ไข',
-    `ยืนยันที่จะแก้ไขข้อมูลใบนี้จริงๆ ใช่ไหม?<br>มี <b>${n} ช่อง</b> ที่ถูกแก้${warn}`);
+  // ถ้าไม่มีอะไรถูกแก้เลย (n===0) แปลว่านี่คือการบันทึกครั้งแรกของใบที่ถูกต้องอยู่แล้ว
+  // ข้อความ "ยืนยันการแก้ไข... มี 0 ช่องที่ถูกแก้" จะอ่านแปลกๆ เปลี่ยนคำให้ตรงสถานการณ์
+  const yes = n > 0
+    ? await askConfirm('ยืนยันการแก้ไข',
+        `ยืนยันที่จะแก้ไขข้อมูลใบนี้จริงๆ ใช่ไหม?<br>มี <b>${n} ช่อง</b> ที่ถูกแก้${warn}`)
+    : await askConfirm('ยืนยันบันทึกใบนี้',
+        `ยืนยันบันทึกใบนี้ลงฐานข้อมูล?${warn}`);
   if (!yes) return;
 
   const body = Object.assign(collect(rec), { flags: rec.flags });
+  // แนบรูปที่ใช้สกัด (ตามองศาที่หมุนไว้ ถ้าหมุน) ไปเก็บด้วย -- ให้หน้า "ประวัติ" ย้อน
+  // ดูใบจริงได้ ไม่ใช่แค่ตัวเลขที่แกะออกมา แปลงไม่สำเร็จก็ยังบันทึกข้อมูลได้ตามปกติ
+  // (แค่ไม่มีรูปในหน้าประวัติของใบนั้น)
+  try {
+    const blob = await fetch(rec.rotUrl || rec.url).then(r => r.blob());
+    body.image_base64 = await blobToBase64(blob);
+  } catch (e) { console.warn('แนบรูปไม่สำเร็จ', e); }
+
   $('btnSave').disabled = true;
   $('btnSave').textContent = 'กำลังบันทึก...';
   let res = null;
@@ -1321,6 +1535,7 @@ $('btnSave').addEventListener('click', async () => {
   refreshRow(rec);
   updateSaveBtn();
   refreshUI();
+  persistState();
 
   if (res?.dup_number) {
     await askConfirm('บันทึกแล้ว — แต่เลขที่ใบซ้ำ',
@@ -1341,6 +1556,7 @@ $('btnDel').addEventListener('click', () => {
   rec.rowEl.remove();
   RECS.splice(RECS.indexOf(rec), 1);
   refreshUI();
+  persistState();
   if (!RECS.length) return closeDetail();
   curIdx = Math.min(curIdx, RECS.length - 1);
   renderDetail();
@@ -1357,6 +1573,7 @@ $('btnRetry').addEventListener('click', () => {
   rowEl.replaceWith(fresh);       // แถวใหม่อยู่ตำแหน่งเดิม -> ลำดับใน ordered() ไม่เปลี่ยน
   queue.push({ file, rowEl: fresh });
   refreshUI();
+  persistState();
   run();
 });
 
@@ -1399,6 +1616,7 @@ $('btnRot').addEventListener('click', e => {
   if (!rec) return;
   rec.rotation = ((rec.rotation || 0) + 90) % 360;
   showImage(rec);
+  persistState();
 });
 
 function toggleZoom() {
@@ -1412,7 +1630,95 @@ function toggleZoom() {
   }
 }
 $('btnZoom').addEventListener('click', e => { e.stopPropagation(); toggleZoom(); });
-detailImg.addEventListener('click', toggleZoom);
+// pointerup (ด้านล่าง) เป็นคนตัดสินว่า "แตะ" (ไม่ลาก) แล้วเรียก expandBubble() ไปแล้ว
+// -- click ที่ตามมาทันทีหลังจากนั้น (browser ยิง click ต่อจาก pointerup เสมอ) ต้องไม่
+// ไปเรียก toggleZoom() ซ้ำอีกที ไม่งั้นแตะครั้งแรกจะขยาย+ซูมพร้อมกันโดยไม่ได้ตั้งใจ
+// เดสก์ท็อป (ไม่มีลูกโป่ง) เท่านั้น -- บนมือถือ pointerdown/pointerup ด้านล่าง
+// จัดการแตะ-เพื่อขยาย/แตะ-เพื่อซูมเองทั้งหมดแล้ว (อธิบายเหตุผลที่คอมเมนต์ด้านล่าง)
+detailImg.addEventListener('click', () => {
+  if (isMobileBubble()) return;
+  toggleZoom();
+});
+
+// ══════════════════════════════════════════════════════════
+// ลูกโป่งรูปลอย (จอแคบเท่านั้น) -- ลากขยับตำแหน่งได้, แตะเพื่อขยายเต็มจอ
+// ทำแบบนี้แทนแบ่งจอครึ่ง-ครึ่งตายตัว (44vh เดิม) เพราะฟอร์มกรอกข้อมูลมีหลายช่อง
+// กว่าจะเลื่อนดูครบต้องเสียพื้นที่ครึ่งจอให้รูปตลอดเวลาทั้งที่ไม่ได้ดูรูปตลอด
+// ══════════════════════════════════════════════════════════
+const imgBackdrop = $('imgBackdrop');
+
+function isMobileBubble() { return window.matchMedia('(max-width: 900px)').matches; }
+
+// ล้าง left/top/right/bottom แบบ inline (จากตอนลาก) ก่อนสลับ expanded ทุกครั้ง --
+// inline style ชนะ CSS class เสมอ ถ้าไม่ล้าง กฎ ".expanded{inset:7vh 4vw}" จะไม่มีผล
+// เลยเวลาที่เคยลากลูกโป่งมาก่อนหน้านี้ กล่องจะค้างเป็นขนาดเล็กทับซ้อนกับข้อมูลเดิม
+function clearDragPosition() {
+  detailImgBox.style.left = detailImgBox.style.top =
+    detailImgBox.style.right = detailImgBox.style.bottom = '';
+}
+function expandBubble() {
+  if (!isMobileBubble()) return;
+  clearDragPosition();
+  detailImgBox.classList.add('expanded');
+  imgBackdrop.classList.add('show');
+}
+function collapseBubble() {
+  clearDragPosition();
+  detailImgBox.classList.remove('expanded', 'zoom');
+  imgBackdrop.classList.remove('show');
+}
+$('btnImgClose').addEventListener('click', e => { e.stopPropagation(); collapseBubble(); });
+imgBackdrop.addEventListener('click', collapseBubble);
+
+// ลาก: pointerdown/move/up ธรรมดา (ไม่ใช้ library) -- ขยับด้วย left/top ตรงๆ
+// (สลับจาก right/bottom เริ่มต้นไปเป็น left/top ทันทีที่เริ่มลากครั้งแรก)
+// แตะเฉยๆ ไม่ลาก (ขยับ < 6px) ถือเป็น "แตะ" -- ลูกโป่งเล็ก = ขยายเต็มจอ, ขยายอยู่แล้ว = ซูม
+//
+// *** ทำไมตัดสินใจเรื่องแตะ/ซูมทั้งหมดในนี้ ไม่พึ่ง click event แยกแบบเดิม ***
+// เดิมใช้ pointerdown/up คู่กับ setPointerCapture() แค่ตอนลากลูกโป่งเล็ก แล้วปล่อยให้
+// "click" event ธรรมดา (บน detailImg) ตัดสินใจเรื่องซูมแยกต่างหาก โดยส่งสัญญาณผ่านตัวแปร
+// justToggledBubble -- แต่วัดจริงพบว่า setPointerCapture() ทำให้เบราว์เซอร์ "ไม่ยิง click
+// event" ให้เลยในจังหวะที่ขยายลูกโป่ง (แตะครั้งแรก) ตัวแปร justToggledBubble เลยค้างเป็น
+// true ข้ามไปกระทบแตะครั้งถัดไป (แตะครั้งที่ 2 ที่ควรจะซูม กลับโดนกลืนเงียบๆ ซูมไม่ทำงาน)
+// แก้โดยย้ายมาตัดสินใจทุกอย่างในนี้เลย ไม่ต้องพึ่ง click event ที่ไม่แน่นอนอีกต่อไป
+let dragging = false, dragMoved = false, dragWasExpanded = false;
+let dragStartX = 0, dragStartY = 0, dragOrigLeft = 0, dragOrigTop = 0;
+
+detailImgBox.addEventListener('pointerdown', e => {
+  if (!isMobileBubble()) return;
+  if (e.target.closest('.imgtools')) return;   // ปุ่มซูม/หมุน/ปิด จัดการของตัวเองแยกไว้แล้ว
+  dragging = true;
+  dragMoved = false;
+  dragWasExpanded = detailImgBox.classList.contains('expanded');
+  const r = detailImgBox.getBoundingClientRect();
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragOrigLeft = r.left;
+  dragOrigTop = r.top;
+  if (!dragWasExpanded) detailImgBox.setPointerCapture(e.pointerId);   // capture เฉพาะตอนลากลูกโป่งเล็กได้จริง
+});
+detailImgBox.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const dx = e.clientX - dragStartX, dy = e.clientY - dragStartY;
+  // เช็คระยะขยับเสมอ (แม้ตอนขยายเต็มจอ) -- ต้องรู้ว่า "ลาก/แพน" ต่างจาก "แตะเฉยๆ"
+  // ไม่งั้นตอนขยายอยู่แล้วเลื่อนดูรอบใบ (ลากนิ้วเพื่อ pan) จะโดนตีความเป็น "แตะ" ตอนปล่อยนิ้ว
+  // แล้วซูมสลับปิดโดยไม่ได้ตั้งใจ ทั้งที่แค่กำลังเลื่อนดูรูปอยู่เฉยๆ
+  if (Math.abs(dx) > 6 || Math.abs(dy) > 6) dragMoved = true;
+  if (!dragMoved || dragWasExpanded) return;   // ตอนขยายเต็มจอ ปล่อยให้ scroll ตามปกติ ไม่ลากย้ายตำแหน่งกล่อง
+  const w = detailImgBox.offsetWidth, h = detailImgBox.offsetHeight;
+  const nl = Math.max(4, Math.min(window.innerWidth - w - 4, dragOrigLeft + dx));
+  const nt = Math.max(4, Math.min(window.innerHeight - h - 4, dragOrigTop + dy));
+  detailImgBox.style.left = nl + 'px';
+  detailImgBox.style.top = nt + 'px';
+  detailImgBox.style.right = 'auto';
+  detailImgBox.style.bottom = 'auto';
+});
+detailImgBox.addEventListener('pointerup', () => {
+  if (!dragging) return;
+  dragging = false;
+  if (dragMoved) return;                       // ลากจริง ไม่ใช่แตะ -- จบแค่ลาก ไม่ต้องขยาย/ซูม
+  if (dragWasExpanded) toggleZoom(); else expandBubble();
+});
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
@@ -1493,13 +1799,22 @@ window.addEventListener('beforeunload', e => {
   if (RECS.length && (!downloaded || unsaved)) { e.preventDefault(); e.returnValue = ''; }
 });
 
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
 }
 
-refreshUI();
+restoreState().catch(err => console.warn('โหลดสถานะที่สำรองไว้ไม่สำเร็จ', err)).finally(refreshUI);
 </script>
 </body>
 </html>

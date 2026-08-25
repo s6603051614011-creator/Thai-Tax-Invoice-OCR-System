@@ -16,6 +16,7 @@ store.py -- ฐานข้อมูลเก็บใบกำกับภา�
     store.summary()                    # ยอดรวมรายเดือน/รายปี
 """
 
+import base64
 import json
 import sqlite3
 from pathlib import Path
@@ -67,6 +68,11 @@ def connect():
 def init():
     with connect() as con:
         con.executescript(SCHEMA)
+        # ใบที่บันทึกไว้ก่อนหน้านี้ (ก่อนมีหน้าประวัติ) ไม่มีคอลัมน์นี้ -- ALTER TABLE
+        # เข้าไปเติมให้แทน CREATE TABLE IF NOT EXISTS เดิมจะไม่ทำอะไรถ้าตารางมีอยู่แล้ว
+        cols = [r["name"] for r in con.execute("PRAGMA table_info(invoices)")]
+        if "image_blob" not in cols:
+            con.execute("ALTER TABLE invoices ADD COLUMN image_blob BLOB")
 
 
 def _num(v):
@@ -100,10 +106,22 @@ def save_invoice(payload: dict) -> dict:
     parsed = parse_thai_date(f.get("invoice_date"))
     date_ce = f"{parsed[0]:04d}-{parsed[1]:02d}-{parsed[2]:02d}" if parsed else None
 
-    cols = ["saved_at", "filename", "date_ce", "flags"] + SCALARS + MONEY
+    # รูปที่ใช้สกัด (data URL หรือ base64 ล้วน จาก frontend) -- เก็บลง SQLite ตรงๆ
+    # เป็น BLOB แทนที่จะแยกไฟล์ต่างหาก เพื่อให้ data/invoices.db ยังเป็นไฟล์เดียว
+    # ก๊อปสำรองได้ตรงๆ ตามที่ตั้งใจไว้แต่แรก (ดู docstring ด้านบน) -- ใช้แสดงในหน้า
+    # "ประวัติ" ให้ย้อนดูใบจริงได้ ไม่ใช่แค่ตัวเลขที่แกะออกมา
+    image_b64 = payload.get("image_base64") or ""
+    image_bytes = None
+    if image_b64:
+        try:
+            image_bytes = base64.b64decode(image_b64.split(",")[-1])
+        except Exception:
+            image_bytes = None
+
+    cols = ["saved_at", "filename", "date_ce", "flags", "image_blob"] + SCALARS + MONEY
     vals = [datetime.now(timezone.utc).isoformat(timespec="seconds"),
             payload.get("filename") or "", date_ce,
-            json.dumps(payload.get("flags") or [], ensure_ascii=False)]
+            json.dumps(payload.get("flags") or [], ensure_ascii=False), image_bytes]
     vals += [str(f.get(k) or "") for k in SCALARS]
     vals += [_num(f.get(k)) for k in MONEY]
 
@@ -169,8 +187,68 @@ def list_invoices(limit: int = 500) -> list:
     with connect() as con:
         return [dict(r) for r in con.execute(
             "SELECT id, saved_at, filename, invoice_number, invoice_date, date_ce,"
-            " seller_name_th, grand_total, vat FROM invoices"
-            " ORDER BY COALESCE(date_ce, '') DESC, id DESC LIMIT ?", (limit,))]
+            " seller_name_th, grand_total, vat, (image_blob IS NOT NULL) AS has_image"
+            " FROM invoices ORDER BY COALESCE(date_ce, '') DESC, id DESC LIMIT ?", (limit,))]
+
+
+def get_invoice(inv_id: int) -> dict | None:
+    """ใบเดียวแบบเต็ม (fields ทุกช่อง + รายการสินค้า) สำหรับหน้าประวัติเปิดแก้ไข"""
+    with connect() as con:
+        row = con.execute("SELECT * FROM invoices WHERE id = ?", (inv_id,)).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["has_image"] = d.pop("image_blob", None) is not None
+        d["flags"] = json.loads(d.get("flags") or "[]")
+        d["items"] = [dict(r) for r in con.execute(
+            "SELECT description, quantity, unit_price, discount, amount FROM items"
+            " WHERE invoice_id = ? ORDER BY seq", (inv_id,))]
+    return d
+
+
+def get_invoice_image(inv_id: int) -> bytes | None:
+    with connect() as con:
+        row = con.execute("SELECT image_blob FROM invoices WHERE id = ?", (inv_id,)).fetchone()
+    return row["image_blob"] if row and row["image_blob"] else None
+
+
+def update_invoice(inv_id: int, payload: dict) -> dict:
+    """แก้ไขใบที่บันทึกไว้แล้ว (จากหน้าประวัติ) -- แก้ในแถวเดิม ไม่สร้างใบใหม่
+    ไม่แตะรูป (image_blob) เพราะหน้าประวัติแก้แค่ตัวเลข/ข้อความ ไม่ได้ถ่ายรูปใหม่"""
+    f = payload.get("fields") or {}
+    items = payload.get("items") or []
+    parsed = parse_thai_date(f.get("invoice_date"))
+    date_ce = f"{parsed[0]:04d}-{parsed[1]:02d}-{parsed[2]:02d}" if parsed else None
+
+    with connect() as con:
+        if not con.execute("SELECT 1 FROM invoices WHERE id = ?", (inv_id,)).fetchone():
+            raise KeyError(f"ไม่พบใบเลขที่ {inv_id}")
+
+        set_cols = ["date_ce = ?", "flags = ?"] + [f"{k} = ?" for k in SCALARS] + [f"{k} = ?" for k in MONEY]
+        vals = [date_ce, json.dumps(payload.get("flags") or [], ensure_ascii=False)]
+        vals += [str(f.get(k) or "") for k in SCALARS]
+        vals += [_num(f.get(k)) for k in MONEY]
+        con.execute(f"UPDATE invoices SET {', '.join(set_cols)} WHERE id = ?", (*vals, inv_id))
+
+        con.execute("DELETE FROM items WHERE invoice_id = ?", (inv_id,))
+        for i, it in enumerate(items, 1):
+            con.execute(
+                "INSERT INTO items (invoice_id, seq, description, quantity, unit_price, discount, amount)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (inv_id, i, str(it.get("description") or ""), str(it.get("quantity") or ""),
+                 _num(it.get("unit_price")), _num(it.get("discount")), _num(it.get("amount"))))
+    return {"id": inv_id, "date_ce": date_ce}
+
+
+def delete_invoice(inv_id: int) -> bool:
+    """ลบใบทิ้งถาวร (ทั้งแถวหลักและรายการสินค้า) -- ใช้จากปุ่ม "ลบ" ในหน้าประวัติ
+    คืน False ถ้าไม่พบใบเลขที่นี้อยู่แล้ว (ให้ endpoint ตอบ 404 แทนที่จะเงียบ)"""
+    with connect() as con:
+        if not con.execute("SELECT 1 FROM invoices WHERE id = ?", (inv_id,)).fetchone():
+            return False
+        con.execute("DELETE FROM items WHERE invoice_id = ?", (inv_id,))
+        con.execute("DELETE FROM invoices WHERE id = ?", (inv_id,))
+    return True
 
 
 def stats() -> dict:

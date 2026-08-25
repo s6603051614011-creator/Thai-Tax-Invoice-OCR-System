@@ -36,7 +36,7 @@ from PIL import Image, ImageOps
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
@@ -448,6 +448,12 @@ def summary_page():
     return _page("summary.html")
 
 
+@app.get("/history", response_class=HTMLResponse)
+def history_page():
+    """หน้าประวัติ -- รายการใบที่บันทึกแล้วทั้งหมด ดูรูปจริง + แก้ไขย้อนหลังได้"""
+    return _page("history.html")
+
+
 def _page(name: str):
     p = STATIC_DIR / name
     if not p.exists():
@@ -504,6 +510,14 @@ def save_invoice(payload: dict = Body(...)):
     return {**result, "learned": learned}
 
 
+@app.delete("/api/invoices/{invoice_id}", dependencies=[Depends(require_api_key)])
+def api_invoice_delete(invoice_id: int):
+    """ลบใบที่บันทึกไว้ถาวร -- จากปุ่ม "ลบ" ในหน้าประวัติ ไม่มี undo"""
+    if not store.delete_invoice(invoice_id):
+        raise HTTPException(404, detail=f"ไม่พบใบเลขที่ {invoice_id}")
+    return {"deleted": invoice_id}
+
+
 @app.get("/api/summary", dependencies=[Depends(require_api_key)])
 def api_summary():
     """ยอดรวมรายเดือน + รายปี สำหรับหน้ากราฟ"""
@@ -512,8 +526,61 @@ def api_summary():
 
 @app.get("/api/invoices", dependencies=[Depends(require_api_key)])
 def api_invoices(limit: int = 500):
-    """รายการใบที่บันทึกไว้ (ล่าสุดก่อน)"""
+    """รายการใบที่บันทึกไว้ (ล่าสุดก่อน) -- ใช้กับหน้าประวัติ (ตัวย่อ ไม่รวมรูป/รายการสินค้า)"""
     return {"invoices": store.list_invoices(limit)}
+
+
+@app.get("/api/invoices/{invoice_id}", dependencies=[Depends(require_api_key)])
+def api_invoice_detail(invoice_id: int):
+    """ใบเดียวแบบเต็ม (ทุกช่อง + รายการสินค้า) -- ให้หน้าประวัติเปิดแก้ไข"""
+    rec = store.get_invoice(invoice_id)
+    if rec is None:
+        raise HTTPException(404, detail=f"ไม่พบใบเลขที่ {invoice_id}")
+    return rec
+
+
+@app.get("/api/invoices/{invoice_id}/image", dependencies=[Depends(require_api_key)])
+def api_invoice_image(invoice_id: int):
+    """รูปใบจริงที่บันทึกไว้ตอนกดยืนยัน -- ใบที่บันทึกก่อนมีหน้าประวัติจะไม่มีรูป (404)"""
+    data = store.get_invoice_image(invoice_id)
+    if data is None:
+        raise HTTPException(404, detail="ใบนี้ไม่มีรูปเก็บไว้ (บันทึกไว้ก่อนมีหน้าประวัติ)")
+    return Response(content=data, media_type="image/jpeg")
+
+
+@app.put("/api/invoices/{invoice_id}", dependencies=[Depends(require_api_key)])
+def api_invoice_update(invoice_id: int, payload: dict = Body(...)):
+    """แก้ไขใบที่บันทึกไว้แล้วจากหน้าประวัติ (แก้ในแถวเดิม ไม่สร้างใบใหม่)"""
+    fields = payload.get("fields")
+    if not isinstance(fields, dict):
+        raise HTTPException(400, detail="payload ต้องมี fields")
+    try:
+        result = store.update_invoice(invoice_id, payload)
+    except KeyError as e:
+        raise HTTPException(404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(500, detail=f"บันทึกไม่สำเร็จ: {e}")
+
+    # เหมือน POST /invoices -- ถือว่าผู้ใช้ตรวจทานแล้วว่าถูกต้อง ให้ตารางอ้างอิงคู่ค้าโตขึ้นด้วย
+    learned = []
+    try:
+        for side in ("seller", "buyer"):
+            name_th = str(fields.get(f"{side}_name_th") or "").strip()
+            if not name_th:
+                continue
+            save_verified(side, name_th,
+                          str(fields.get(f"{side}_name_en") or ""),
+                          str(fields.get(f"{side}_tax_id") or ""),
+                          str(fields.get(f"{side}_address") or ""))
+            learned.append(side)
+        if learned and STATE["loaded"]:
+            STATE["master_seller"] = build_master_live("seller")
+            STATE["master_buyer"] = build_master_live("buyer")
+    except Exception as e:
+        print(f"เตือน: แก้ไขใบสำเร็จแล้ว แต่จำข้อมูลคู่ค้าไม่สำเร็จ: {e}", flush=True)
+        return {**result, "learned": [], "learn_error": str(e)}
+
+    return {**result, "learned": learned}
 
 
 if __name__ == "__main__":
