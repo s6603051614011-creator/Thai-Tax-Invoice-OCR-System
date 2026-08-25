@@ -21,6 +21,11 @@ dataset/formatted/
 input/
 results/
 
+# Ground-truth labels (real invoice content: names, tax IDs, addresses) —
+# scrubbed from git history 2026-08-25, keep local only from now on
+dataset/annotations_auto.json
+dataset/augmented_labels.json
+
 # Master list DB (production only) — seeds from train then grows with real
 # supplier data confirmed by staff; machine-local state, not repo content
 dataset/master_list.db
